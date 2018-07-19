@@ -17,7 +17,7 @@ before_install:
 - go get github.com/wadey/gocovmerge
 
 # Install gcloud, for integration tests.
-- $TRAVIS_BUILD_DIR/travis/install_gcloud.sh
+- $TRAVIS_BUILD_DIR/travis/install_gcloud.sh app-engine-python app-engine-go
 - source "${HOME}/google-cloud-sdk/path.bash.inc"
 
 script:
