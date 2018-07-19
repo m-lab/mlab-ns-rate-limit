@@ -1,0 +1,24 @@
+language: go
+
+go:
+- '1.9'
+
+# Unconditionally place the repo at GOPATH/src/${go_import_path} to support
+# forks.
+go_import_path: github.com/m-lab/mlab-ns-rate-limit
+
+cache:
+  directories:
+    - "$HOME/google-cloud-sdk/"
+
+before_install:
+- go get github.com/mattn/goveralls
+- go get github.com/wadey/gocovmerge
+
+script:
+# Run query "unit tests".
+- go test -v ./... -bench=.
+
+# Coveralls
+#- $HOME/gopath/bin/gocovmerge bq.cov > merge.cov
+#- $HOME/gopath/bin/goveralls -coverprofile=merge.cov -service=travis-ci
