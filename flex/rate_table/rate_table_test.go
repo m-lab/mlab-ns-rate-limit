@@ -10,21 +10,9 @@ import (
 	"google.golang.org/appengine"
 	"google.golang.org/appengine/aetest"
 	"google.golang.org/appengine/memcache"
-)
 
-type EndpointStats struct {
-	AF             string  `datastore:"af"`
-	Format         string  `datastore:"format"`
-	Latitude       string  `datastore:"latitude"`
-	Longitude      string  `datastore:"longitude"`
-	Metro          string  `datastore:"metro"`
-	Policy         string  `datastore:"policy"`
-	Path           string  `datastore:"path"`
-	Probability    float32 `datastore:"probability"`
-	RequesterIP    string  `datastore:"requester_ip"`
-	RequestsPerDay int32   `datastore:"requests_per_day"`
-	TargetIP       string  `datastore:"target_ip"`
-}
+	"github.com/m-lab/mlab-ns-rate-limit/endpoint"
+)
 
 func xTestDSEntity(t *testing.T) {
 	ctx := context.Background()
@@ -47,7 +35,7 @@ func xTestDSEntity(t *testing.T) {
 	key.Namespace = "endpoint_stats"
 
 	// Creates a Task instance.
-	ep := EndpointStats{
+	ep := endpoint.Stats{
 		Path:     "ndt_ssl",
 		Policy:   "geo_options",
 		TargetIP: "127.0.0.1",
@@ -84,7 +72,7 @@ func BenchmarkMemcacheGet(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	ep := EndpointStats{
+	ep := endpoint.Stats{
 		Path:     "ndt_ssl",
 		Policy:   "geo_options",
 		TargetIP: "127.0.0.1",
