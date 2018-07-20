@@ -117,6 +117,10 @@ func benchmarkMemcacheGet(ctx context.Context) time.Duration {
 	return end.Sub(start) / 1000
 }
 
+func testBradFitz(ctx context.Context) {
+
+}
+
 /*
 // TODO(gfr) unify counting for http and pubsub paths?
 func worker(rwr http.ResponseWriter, rq *http.Request) {

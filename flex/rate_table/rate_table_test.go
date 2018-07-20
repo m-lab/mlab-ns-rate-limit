@@ -11,6 +11,7 @@ import (
 	"google.golang.org/appengine/aetest"
 	"google.golang.org/appengine/memcache"
 
+	"github.com/m-lab/go/bqext"
 	"github.com/m-lab/mlab-ns-rate-limit/endpoint"
 )
 
@@ -99,4 +100,18 @@ func BenchmarkMemcacheGet(b *testing.B) {
 	gkey = key
 	gctx = ctx
 	b.Run("MemcacheRead", Inner)
+}
+
+func TestSilly(t *testing.T) {
+	log.Printf("%s\n", endpoint.Query)
+
+	dsExt, err := bqext.NewDataset("mlab-ns", "exports")
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := endpoint.QueryAndFetch(&dsExt, endpoint.Query)
+	if err != nil {
+		t.Fatal(err)
+	}
+	log.Println(len(result))
 }

@@ -3,13 +3,13 @@ package endpoint
 
 import (
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
-	"log"
 
+	"cloud.google.com/go/bigquery"
 	"cloud.google.com/go/datastore"
-	"google.golang.org/appengine"
-	"google.golang.org/appengine/memcache"
+	"github.com/m-lab/go/bqext"
+	"google.golang.org/api/iterator"
 )
 
 // Stats contains all information about an endpoint.
@@ -65,36 +65,51 @@ func (ep *Stats) Save(client datastore.Client, agent string) error {
 	return nil
 }
 
-// This shows that memcache read, with aetest environment, takes about 400 usec.
-func testMemcache() {
-	ctx := context.Background()
-	ctx, err := appengine.Namespace(ctx, "memcache_requests")
+// QueryAndFetch executes a query that should return one ore more rows
+// TODO - move this into go/bqext
+func QueryAndFetch(dsExt *bqext.Dataset, q string) ([]map[string]bigquery.Value, error) {
+	query := dsExt.ResultQuery(q, false)
+	it, err := query.Read(context.Background())
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
-	ep := Stats{
-		Path:     "ndt_ssl",
-		Policy:   "geo_options",
-		TargetIP: "127.0.0.1",
-	}
-	epJSON, err := json.Marshal(ep)
-	if err != nil {
-		log.Fatal(err)
-	}
-	key := ep.Key("foobar")
+	var rows = make([]map[string]bigquery.Value, 0, 1000)
+	row := make(map[string]bigquery.Value, 20)
 
-	// Set the item, unconditionally
-	if err := memcache.Set(ctx, &memcache.Item{Key: key, Value: epJSON}); err != nil {
-		log.Fatalf("error setting item: %v", err)
+	for err = it.Next(&row); err == nil; err = it.Next(&row) {
+		rows = append(rows, row)
+		row = make(map[string]bigquery.Value, 20)
 	}
-
-	// Get the item from the memcache
-	if item, err := memcache.Get(ctx, key); err == memcache.ErrCacheMiss {
-		log.Fatal("item not in the cache")
-	} else if err != nil {
-		log.Fatalf("error getting item: %v", err)
-	} else {
-		log.Printf("the lyric is %q", item.Value)
+	if err != iterator.Done {
+		return nil, errors.New("multiple row data")
 	}
+	return rows, nil
 }
+
+var Query = `
+--select count(tests) as endpoints, sum(tests) as sum, userAgent, resource, agent from
+select ip, ip_param, tests, userAgent, resource, agent from
+(
+SELECT count(*) as tests,
+regexp_extract(protoPayload.resource, "/([^?]+)") as rsrc,
+regexp_extract(protoPayload.resource, "[?&]?format=([^&]+)") as format,
+regexp_extract(protoPayload.resource, "[?&]+policy=([^&]+)") as policy,
+regexp_extract(protoPayload.resource, "[?&]+address_family=([^&]+)") as af,
+regexp_extract(protoPayload.resource, "[?&]+ip=([^&]+)") as ip_param,
+regexp_extract(protoPayload.resource, "[?&]+metro=([^&]+)") as metro,
+regexp_extract(protoPayload.resource, "[?&]+lat[a-z]*=([^&]+)") as lat,
+regexp_extract(protoPayload.resource, "[?&]+lon[a-z]*=([^&]+)") as long,
+regexp_extract(protoPayload.userAgent, "([a-zA-Z0-9_/.+-]+)") as agent,
+protoPayload.ip,
+protopayload.userAgent,
+protoPayload.resource
+FROM ` + "`mlab-ns.exports.appengine_googleapis_com_request_log_20180718`" + `
+group by ip, userAgent, resource, agent, ip_param
+)
+where tests > 6
+group by ip, ip_param, userAgent, resource, agent, tests
+order by tests DESC
+
+--and protoPayload.ip like "%2620:%"
+`
