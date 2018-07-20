@@ -1,16 +1,17 @@
-// Package main contains the top level app-engine flex code to run the rate_table app.
-package main
+// Package rate_table contains the top level app-engine flex code to run the rate_table app.
+package rate_table
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
-	"net/http/pprof"
 	"os"
-	"runtime"
 
-	"github.com/m-lab/etl/etl"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/m-lab/mlab-ns-rate-limit/endpoint"
+	"google.golang.org/appengine"
+	"google.golang.org/appengine/memcache"
 )
 
 // 1.  Datastore stuff
@@ -29,6 +30,8 @@ import (
 func init() {
 	// Always prepend the filename and line number.
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
+	http.HandleFunc("/", defaultHandler)
+	http.HandleFunc("/receiver", receiver)
 }
 
 // TODO(gfr) Add either a black list or a white list for the environment
@@ -51,6 +54,64 @@ func Status(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "</body></html>\n")
 }
 
+const defaultMessage = "<html><body>This is not the app you're looking for.</body></html>"
+
+// A default handler for root path.
+func defaultHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		// TODO - this is actually returning StatusOK.  Weird!
+		http.Error(w, `{"message": "Method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+	fmt.Fprintf(w, defaultMessage)
+}
+
+// receiver accepts a GET request, and transforms the given parameters into a TaskQueue Task.
+func receiver(w http.ResponseWriter, r *http.Request) {
+	ctx := appengine.NewContext(r)
+
+	benchmarkMemcacheGet(ctx)
+}
+
+// This shows that memcache read, with aetest environment, takes about 400 usec.
+func benchmarkMemcacheGet(ctx context.Context) {
+	ctx, err := appengine.Namespace(ctx, "memcache_requests")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	ep := endpoint.Stats{
+		Path:     "ndt_ssl",
+		Policy:   "geo_options",
+		TargetIP: "127.0.0.1",
+	}
+	epJSON, err := json.Marshal(ep)
+	if err != nil {
+		log.Fatal(err)
+	}
+	key := "foobar"
+	// Set the item, unconditionally
+	if err := memcache.Set(ctx, &memcache.Item{Key: key, Value: epJSON}); err != nil {
+		log.Fatalf("error setting item: %v", err)
+	}
+
+	// Get the item from the memcache
+	if item, err := memcache.Get(ctx, key); err == memcache.ErrCacheMiss {
+		log.Fatal("item not in the cache")
+	} else if err != nil {
+		log.Fatalf("error getting item: %v", err)
+	} else {
+		log.Printf("the lyric is %q", item.Value)
+	}
+
+	for i := 0; i < 1000; i++ {
+		if _, err := memcache.Get(ctx, key); err != nil {
+			log.Fatal(err)
+		}
+	}
+}
+
+/*
 // TODO(gfr) unify counting for http and pubsub paths?
 func worker(rwr http.ResponseWriter, rq *http.Request) {
 	// This will add metric count and log message from any panic.
@@ -100,3 +161,4 @@ func main() {
 	http.Handle("/random-metrics", promhttp.Handler())
 	http.ListenAndServe(":8080", nil)
 }
+*/

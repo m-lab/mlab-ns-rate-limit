@@ -1,4 +1,4 @@
-package main_test
+package rate_table_test
 
 import (
 	"context"

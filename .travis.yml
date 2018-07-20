@@ -27,3 +27,14 @@ script:
 # Coveralls
 #- $HOME/gopath/bin/gocovmerge bq.cov > merge.cov
 #- $HOME/gopath/bin/goveralls -coverprofile=merge.cov -service=travis-ci
+
+deploy:
+# Testing: deploy to ns-sandbox for testing purpose.
+- provider: script
+  script:
+    $TRAVIS_BUILD_DIR/travis/deploy_app.sh mlab-nstesting SERVICE_ACCOUNT_mlab_nstesting $TRAVIS_BUILD_DIR/flex/rate_table
+  skip_cleanup: true
+  on:
+    repo: m-lab/mlab-ns-rate-limit
+    all_branches: true
+    condition: $TRAVIS_BRANCH == sandbox-* && $TRAVIS_EVENT_TYPE == push
