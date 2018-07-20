@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/m-lab/mlab-ns-rate-limit/endpoint"
 	"google.golang.org/appengine"
@@ -70,11 +71,13 @@ func defaultHandler(w http.ResponseWriter, r *http.Request) {
 func receiver(w http.ResponseWriter, r *http.Request) {
 	ctx := appengine.NewContext(r)
 
-	benchmarkMemcacheGet(ctx)
+	opTime := benchmarkMemcacheGet(ctx)
+
+	fmt.Fprintf(w, "%s per memcache hit", opTime.String())
 }
 
 // This shows that memcache read, with aetest environment, takes about 400 usec.
-func benchmarkMemcacheGet(ctx context.Context) {
+func benchmarkMemcacheGet(ctx context.Context) time.Duration {
 	ctx, err := appengine.Namespace(ctx, "memcache_requests")
 	if err != nil {
 		log.Fatal(err)
@@ -104,11 +107,14 @@ func benchmarkMemcacheGet(ctx context.Context) {
 		log.Printf("the lyric is %q", item.Value)
 	}
 
+	start := time.Now()
 	for i := 0; i < 1000; i++ {
 		if _, err := memcache.Get(ctx, key); err != nil {
 			log.Fatal(err)
 		}
 	}
+	end := time.Now()
+	return end.Sub(start) / 1000
 }
 
 /*
