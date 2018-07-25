@@ -14,21 +14,24 @@ import (
 
 // Stats contains all information about an endpoint.
 type Stats struct {
-	Probability    float32 `datastore:"probability"`
-	RequestsPerDay int32   `datastore:"requests_per_day"`
+	// Coarse endpoint characteristics.
+	AgentPrefix string // The simple agent string, without build info.
+	Path        string // Root path or URL without params.
+	TargetIP    string // IP for which the request is being made.
 
-	// These fields are characteristics of the endpoint.
-	AF        string `datastore:"af"`
-	Format    string `datastore:"format"`
-	Latitude  string `datastore:"latitude"`
-	Longitude string `datastore:"longitude"`
-	Metro     string `datastore:"metro"`
-	Policy    string `datastore:"policy"`
-	Path      string `datastore:"path"`
-	TargetIP  string `datastore:"target_ip"`
+	RequestsPerDay int32   // Number of requests made per day.
+	Probability    float32 // Fraction of requests that should be sent to standard backend.
+
+	// Additional resource parameters associated with the endpoint.
+	AF        string // Address family
+	Format    string // Format, e.g. json
+	Latitude  string
+	Longitude string
+	Metro     string // Metro specified with metro=
+	Policy    string // Policy specified with policy=, e.g. geo_options
 
 	// RequesterIP specifies the requester, if different from the target.
-	RequesterIP string `datastore:"requester_ip"`
+	RequesterIP string
 }
 
 func getClient() (*datastore.Client, error) {
