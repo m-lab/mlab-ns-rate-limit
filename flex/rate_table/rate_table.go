@@ -73,6 +73,7 @@ func receiver(w http.ResponseWriter, r *http.Request) {
 	benchmarkMemcacheGet(ctx)
 }
 
+// This shows that standard environment memcache hit takes about 1 msec.
 func benchmarkMemcacheGet(ctx context.Context) {
 	ctx, err := appengine.Namespace(ctx, "memcache_requests")
 	if err != nil {

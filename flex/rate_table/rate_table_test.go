@@ -52,7 +52,7 @@ var (
 	gkey string
 )
 
-func Inner(b *testing.B) {
+func memcacheBenchmarkInner(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		if _, err := memcache.Get(gctx, gkey); err != nil {
 			b.Fatal(err)
@@ -61,7 +61,7 @@ func Inner(b *testing.B) {
 }
 
 // This shows that memcache read, with aetest environment, takes about 400 usec.
-func BenchmarkMemcacheGet(b *testing.B) {
+func BenchmarkMemcacheGetAETest(b *testing.B) {
 	ctx, done, err := aetest.NewContext()
 	if err != nil {
 		b.Fatal(err)
@@ -98,5 +98,5 @@ func BenchmarkMemcacheGet(b *testing.B) {
 
 	gkey = key
 	gctx = ctx
-	b.Run("MemcacheRead", Inner)
+	b.Run("MemcacheRead", memcacheBenchmarkInner)
 }
