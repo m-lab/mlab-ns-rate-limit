@@ -1,4 +1,5 @@
-// Package rate_table contains the top level app-engine flex code to run the rate_table app.
+// Package rate_table contains the top level app-engine code to create datastore and memcache
+// entries to control mlab-ns rate limiting.
 package rate_table
 
 import (

@@ -11,8 +11,8 @@ import (
 	"cloud.google.com/go/datastore"
 )
 
-// Stats contains information required to create endpoint keys (for datastore
-// and memcache), and
+// Stats contains information about request rate for an endpoint, and probability
+// for mlab-ns to use in routing new requests.
 type Stats struct {
 	RequestsPerDay int32   // Number of requests made per day.
 	Probability    float32 // Fraction of requests that should be sent to standard backend.
