@@ -32,9 +32,11 @@ func init() {
 	// Always prepend the filename and line number.
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	http.HandleFunc("/", defaultHandler)
-	http.HandleFunc("/receiver", receiver)
+	http.HandleFunc("/benchmark", benchmark)
+	http.HandleFunc("/status", Status)
 }
 
+// Status writes an instance summary into the response.
 // TODO(gfr) Add either a black list or a white list for the environment
 // variables, so we can hide sensitive vars. https://github.com/m-lab/etl/issues/384
 func Status(w http.ResponseWriter, r *http.Request) {
@@ -66,8 +68,7 @@ func defaultHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, defaultMessage)
 }
 
-// receiver accepts a GET request, and transforms the given parameters into a TaskQueue Task.
-func receiver(w http.ResponseWriter, r *http.Request) {
+func benchmark(w http.ResponseWriter, r *http.Request) {
 	ctx := appengine.NewContext(r)
 
 	benchmarkMemcacheGet(ctx)
@@ -82,9 +83,8 @@ func benchmarkMemcacheGet(ctx context.Context) {
 	}
 
 	ep := endpoint.Stats{
-		Path:     "ndt_ssl",
-		Policy:   "geo_options",
-		TargetIP: "127.0.0.1",
+		RequestsPerDay: 1234,
+		Probability:    6 / 1234.0,
 	}
 	epJSON, err := json.Marshal(ep)
 	if err != nil {

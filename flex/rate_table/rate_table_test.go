@@ -35,11 +35,7 @@ func xTestDSEntity(t *testing.T) {
 	key.Namespace = "endpoint_stats"
 
 	// Creates a Task instance.
-	ep := endpoint.Stats{
-		Path:     "ndt_ssl",
-		Policy:   "geo_options",
-		TargetIP: "127.0.0.1",
-	}
+	ep := endpoint.Stats{}
 
 	// Saves the new entity.
 	if _, err := client.Put(ctx, key, &ep); err != nil {
@@ -73,9 +69,8 @@ func BenchmarkMemcacheGet(b *testing.B) {
 	}
 
 	ep := endpoint.Stats{
-		Path:     "ndt_ssl",
-		Policy:   "geo_options",
-		TargetIP: "127.0.0.1",
+		RequestsPerDay: 1234,
+		Probability:    6 / 1234.0,
 	}
 	epJson, err := json.Marshal(ep)
 	if err != nil {
@@ -88,12 +83,10 @@ func BenchmarkMemcacheGet(b *testing.B) {
 	}
 
 	// Get the item from the memcache
-	if item, err := memcache.Get(ctx, key); err == memcache.ErrCacheMiss {
+	if _, err := memcache.Get(ctx, key); err == memcache.ErrCacheMiss {
 		b.Fatal("item not in the cache")
 	} else if err != nil {
 		b.Fatalf("error getting item: %v", err)
-	} else {
-		log.Printf("the lyric is %q", item.Value)
 	}
 
 	gkey = key
