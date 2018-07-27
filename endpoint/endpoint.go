@@ -1,23 +1,26 @@
-// Package endpoint contains tools for dealing with endpoints
+// Package endpoint contains stats for client endpoints.  An endpoint corresponds
+// to an mlab-ns request signature that we expect may represent an individual
+// requester endpoint.  (IP alone is insufficient, because of CG-NAT and use
+// of proxies).
 package endpoint
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"log"
 
 	"cloud.google.com/go/datastore"
-	"google.golang.org/appengine"
-	"google.golang.org/appengine/memcache"
 )
 
-// Stats contains all information about an endpoint.
+// Stats contains information required to create endpoint keys (for datastore
+// and memcache), and
 type Stats struct {
 	// Coarse endpoint characteristics.
 	AgentPrefix string // The simple agent string, without build info.
 	Path        string // Root path or URL without params.
-	TargetIP    string // IP for which the request is being made.
+
+	// IP for which the request is being made.  This usually the IP of the
+	// requester, but also may be specified explicitly in request parameters.
+	TargetIP string
 
 	RequestsPerDay int32   // Number of requests made per day.
 	Probability    float32 // Fraction of requests that should be sent to standard backend.
@@ -30,8 +33,11 @@ type Stats struct {
 	Metro     string // Metro specified with metro=
 	Policy    string // Policy specified with policy=, e.g. geo_options
 
-	// RequesterIP specifies the requester, if different from the target.
-	RequesterIP string
+	// RemoteIP specifies the IP address of the requester.  It is usually
+	// empty, indicating that the TargetIP is also the remote IP.  If the
+	// target IP is specified in a request parameter, then this field will
+	// be set to the IP of the requester.
+	RemoteIP string
 }
 
 func getClient() (*datastore.Client, error) {
@@ -43,7 +49,7 @@ func getClient() (*datastore.Client, error) {
 	return datastore.NewClient(ctx, projectID)
 }
 
-// Key creates the datastore or memcache key for an EndpointStats object.
+// Key creates the datastore or memcache key for a Stats object.
 func (ep *Stats) Key(agent string) string {
 	//       127.0.0.1#Davlik 2.1.0 (blah blah blah)#ndt_ssl#format#geo_options#af#ip#metro#lat#lon"
 	name := fmt.Sprintf("%s#%s#%s#%s#%s#%s#%s#%s#%s", ep.TargetIP, agent, ep.Path, ep.Format, ep.Policy, ep.AF, ep.Metro, ep.Latitude, ep.Longitude)
@@ -66,38 +72,4 @@ func (ep *Stats) Save(client datastore.Client, agent string) error {
 		return err
 	}
 	return nil
-}
-
-// This shows that memcache read, with aetest environment, takes about 400 usec.
-func testMemcache() {
-	ctx := context.Background()
-	ctx, err := appengine.Namespace(ctx, "memcache_requests")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	ep := Stats{
-		Path:     "ndt_ssl",
-		Policy:   "geo_options",
-		TargetIP: "127.0.0.1",
-	}
-	epJSON, err := json.Marshal(ep)
-	if err != nil {
-		log.Fatal(err)
-	}
-	key := ep.Key("foobar")
-
-	// Set the item, unconditionally
-	if err := memcache.Set(ctx, &memcache.Item{Key: key, Value: epJSON}); err != nil {
-		log.Fatalf("error setting item: %v", err)
-	}
-
-	// Get the item from the memcache
-	if item, err := memcache.Get(ctx, key); err == memcache.ErrCacheMiss {
-		log.Fatal("item not in the cache")
-	} else if err != nil {
-		log.Fatalf("error getting item: %v", err)
-	} else {
-		log.Printf("the lyric is %q", item.Value)
-	}
 }

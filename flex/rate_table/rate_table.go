@@ -20,10 +20,11 @@ import (
 // 4.  Other logic
 
 // Design elements:
-//  a. Only this singleton app will write to datastore or memcache.  mlab-ns will be read only.
-//  b. Since we update memcache, expiration time can be indefinite.  Any item in memcache will
-//     be up to date.
-//  c. We must remove any items in memcache that are not present in the newest table.
+//  a. This will run in appengine standard, triggered by an appengine cron request.
+//  b. Need to determine whether cron jobs may run concurrently, which could cause headaches.
+//  c. Memcache entries will be set to expire in twice the cron interval, so that
+//     we don't have to delete endpoint signatures that are no longer abusive.
+//     We still have to delete them from datastore, though.
 //  d. We will handle the BQ query, and directly build the table in memcache and datastore as
 //     we read the query result.
 
@@ -59,7 +60,6 @@ const defaultMessage = "<html><body>This is not the app you're looking for.</bod
 // A default handler for root path.
 func defaultHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		// TODO - this is actually returning StatusOK.  Weird!
 		http.Error(w, `{"message": "Method not allowed"}`, http.StatusMethodNotAllowed)
 		return
 	}
@@ -73,6 +73,8 @@ func receiver(w http.ResponseWriter, r *http.Request) {
 	benchmarkMemcacheGet(ctx)
 }
 
+// TODO Remove this when development complete.  Only needed for development
+// performance validation.
 func benchmarkMemcacheGet(ctx context.Context) {
 	ctx, err := appengine.Namespace(ctx, "memcache_requests")
 	if err != nil {
@@ -92,15 +94,6 @@ func benchmarkMemcacheGet(ctx context.Context) {
 	// Set the item, unconditionally
 	if err := memcache.Set(ctx, &memcache.Item{Key: key, Value: epJSON}); err != nil {
 		log.Fatalf("error setting item: %v", err)
-	}
-
-	// Get the item from the memcache
-	if item, err := memcache.Get(ctx, key); err == memcache.ErrCacheMiss {
-		log.Fatal("item not in the cache")
-	} else if err != nil {
-		log.Fatalf("error getting item: %v", err)
-	} else {
-		log.Printf("the lyric is %q", item.Value)
 	}
 
 	for i := 0; i < 1000; i++ {
