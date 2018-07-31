@@ -11,6 +11,7 @@ import (
 	"google.golang.org/appengine/aetest"
 	"google.golang.org/appengine/memcache"
 
+	"github.com/m-lab/go/bqext"
 	"github.com/m-lab/mlab-ns-rate-limit/endpoint"
 )
 
@@ -56,7 +57,9 @@ func Inner(b *testing.B) {
 	}
 }
 
-// This shows that memcache read, with aetest environment, takes about 400 usec.
+// This runs against aetest local environment, andshows that memcache hit takes about 400 usec.
+// In actual standard appengine environment, it is generally a bit over 1 msec/hit.
+
 func BenchmarkMemcacheGet(b *testing.B) {
 	ctx, done, err := aetest.NewContext()
 	if err != nil {
@@ -92,4 +95,56 @@ func BenchmarkMemcacheGet(b *testing.B) {
 	gkey = key
 	gctx = ctx
 	b.Run("MemcacheRead", Inner)
+}
+
+func getClient() (*datastore.Client, error) {
+	ctx := context.Background()
+
+	// Set your Google Cloud Platform project ID.
+	projectID := "mlab-nstesting"
+
+	return datastore.NewClient(ctx, projectID)
+}
+
+func TestCreateTestEntries(t *testing.T) {
+	dsExt, err := bqext.NewDataset("mlab-ns", "exports")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err := endpoint.QueryAndFetch(&dsExt, 500)
+	if err != nil {
+		t.Fatal(err)
+	}
+	log.Println(len(rows))
+	for i := range rows {
+		if i > 10 {
+			break
+		}
+		log.Println(rows[i])
+	}
+
+	keys, endpoints, err := endpoint.MakeKeysAndStats(rows, 500)
+	if err != nil {
+		log.Fatalf("Failed: %v", err)
+	}
+
+	client, err := getClient()
+	if err != nil {
+		log.Fatal(err)
+	}
+	/*
+		ctx := context.Background()
+
+		err = client.DeleteMulti(ctx, keys)
+		if err != nil {
+			log.Fatal(err)
+		}*/
+
+	return
+	// Saves the new entity.
+	err = endpoint.Saveall(client, keys, endpoints)
+	if err != nil {
+		log.Fatalf("Failed: %v", err)
+	}
+	log.Println("Wrote", len(keys), "of", len(rows))
 }
