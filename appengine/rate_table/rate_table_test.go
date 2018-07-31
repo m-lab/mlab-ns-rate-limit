@@ -132,6 +132,13 @@ func TestCreateTestEntries(t *testing.T) {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	qkeys, err := endpoint.GetAllFromDS(client)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println("Found", len(qkeys))
+
 	/*
 		ctx := context.Background()
 

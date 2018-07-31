@@ -132,9 +132,12 @@ func QueryAndFetch(dsExt *bqext.Dataset, threshold int64) ([]map[string]bigquery
 	return rows, nil
 }
 
-func GetAllFromDS() ([]*datastore.Key, error) {
+func GetAllFromDS(client *datastore.Client) ([]*datastore.Key, error) {
+	query := datastore.NewQuery("alt_requests").Namespace("endpoint_stats")
+	query = query.KeysOnly()
 
-	return nil, nil
+	ctx := context.Background()
+	return client.GetAll(ctx, query, nil)
 }
 
 var Query1 = `select *,
