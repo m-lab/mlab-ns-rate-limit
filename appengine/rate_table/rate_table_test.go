@@ -106,6 +106,18 @@ func getClient() (*datastore.Client, error) {
 	return datastore.NewClient(ctx, projectID)
 }
 
+func xTestDeleteAllKeys(t *testing.T) {
+	client, err := getClient()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = endpoint.DeleteAllKeys(client, "endpoint_stats", "requests")
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestCreateTestEntries(t *testing.T) {
 	dsExt, err := bqext.NewDataset("mlab-ns", "exports")
 	if err != nil {

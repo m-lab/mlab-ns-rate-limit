@@ -13,7 +13,6 @@ import (
 	"cloud.google.com/go/bigquery"
 	"cloud.google.com/go/datastore"
 	"github.com/m-lab/go/bqext"
-	"github.com/m-lab/mlab-ns-rate-limit/endpoint"
 	"google.golang.org/api/iterator"
 )
 
@@ -144,24 +143,21 @@ func GetAllKeys(client *datastore.Client, namespace string, kind string) ([]*dat
 }
 
 // DeleteAllKeys deletes all keys for a namespace and kind from Datastore.
-func DeleteAllKeys(namespace string, kind string) error {
-	client, err := getClient()
-	if err != nil {
-		return err
-	}
-
-	qkeys, err := endpoint.GetAllKeys(client, namespace, kind)
+func DeleteAllKeys(client *datastore.Client, namespace string, kind string) error {
+	qkeys, err := GetAllKeys(client, namespace, kind)
 	if err != nil {
 		return err
 	}
 
 	ctx := context.Background()
 
-	err = client.DeleteMulti(ctx, keys)
+	err = client.DeleteMulti(ctx, qkeys)
 	if err != nil {
 		return err
 	}
 	log.Println("Deleted", len(qkeys), "keys from datastore.")
+
+	return nil
 }
 
 var Query1 = `select *,
