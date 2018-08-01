@@ -106,6 +106,18 @@ func getClient() (*datastore.Client, error) {
 	return datastore.NewClient(ctx, projectID)
 }
 
+func xTestDeleteAllKeys(t *testing.T) {
+	client, err := getClient()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = endpoint.DeleteAllKeys(client, "endpoint_stats", "requests")
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestCreateTestEntries(t *testing.T) {
 	dsExt, err := bqext.NewDataset("mlab-ns", "exports")
 	if err != nil {
@@ -123,17 +135,18 @@ func TestCreateTestEntries(t *testing.T) {
 		log.Println(rows[i])
 	}
 
-	keys, endpoints, err := endpoint.MakeKeysAndStats(rows, 500)
+	keys, endpoints, err := endpoint.MakeKeysAndStats(rows, 300)
 	if err != nil {
 		log.Fatalf("Failed: %v", err)
 	}
+	log.Println(len(keys), "rows over threshold")
 
 	client, err := getClient()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	qkeys, err := endpoint.GetAllFromDS(client)
+	qkeys, err := endpoint.GetAllKeys(client, "endpoint_stats", "requests")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -147,7 +160,6 @@ func TestCreateTestEntries(t *testing.T) {
 			log.Fatal(err)
 		}*/
 
-	return
 	// Saves the new entity.
 	err = endpoint.Saveall(client, keys, endpoints)
 	if err != nil {

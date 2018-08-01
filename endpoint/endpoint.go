@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 
 	"cloud.google.com/go/bigquery"
 	"cloud.google.com/go/datastore"
@@ -132,12 +133,31 @@ func QueryAndFetch(dsExt *bqext.Dataset, threshold int64) ([]map[string]bigquery
 	return rows, nil
 }
 
-func GetAllFromDS(client *datastore.Client) ([]*datastore.Key, error) {
-	query := datastore.NewQuery("alt_requests").Namespace("endpoint_stats")
+// GetAllKeys fetches all keys from Datastore for a namespace and kind.
+func GetAllKeys(client *datastore.Client, namespace string, kind string) ([]*datastore.Key, error) {
+	query := datastore.NewQuery(kind).Namespace(namespace)
 	query = query.KeysOnly()
 
 	ctx := context.Background()
 	return client.GetAll(ctx, query, nil)
+}
+
+// DeleteAllKeys deletes all keys for a namespace and kind from Datastore.
+func DeleteAllKeys(client *datastore.Client, namespace string, kind string) error {
+	qkeys, err := GetAllKeys(client, namespace, kind)
+	if err != nil {
+		return err
+	}
+
+	ctx := context.Background()
+
+	err = client.DeleteMulti(ctx, qkeys)
+	if err != nil {
+		return err
+	}
+	log.Println("Deleted", len(qkeys), "keys from datastore.")
+
+	return nil
 }
 
 var Query1 = `select *,
