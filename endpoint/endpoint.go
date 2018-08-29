@@ -1,12 +1,11 @@
 // Package endpoint contains stats for client endpoints.  An endpoint corresponds
 // to an mlab-ns request signature that we expect may represent an individual
 // requester endpoint.  (IP alone is insufficient, because of CG-NAT and use
-// of proxies).
+// of proxies).  Currently, we use the useAgent, resource string, and IP address.
 package endpoint
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 
@@ -14,6 +13,11 @@ import (
 	"cloud.google.com/go/datastore"
 	"github.com/m-lab/go/bqext"
 	"google.golang.org/api/iterator"
+)
+
+const (
+	endpointKind      = "requests"
+	endpointNamespace = "endpoint_stats"
 )
 
 // Stats contains information about request rate for an endpoint, and probability
@@ -51,32 +55,21 @@ func StatsFromMap(row map[string]bigquery.Value) (string, Stats) {
 	return key, stats
 }
 
-// Key creates the memcache key.
-func Key(userAgent string, resource string, IP string) string {
-	name := fmt.Sprintf("%s#%s#%s", userAgent, resource, IP)
-	return name
-}
-
 // DSKey creates a Datastore Key by adding namespace and kind to name string.
 func DSKey(name string) *datastore.Key {
-	// Sets the kind for the new entity.
-	kind := "requests"
 	// Creates a Key instance.
-	key := datastore.NameKey(kind, name, nil)
-	key.Namespace = "endpoint_stats"
+	key := datastore.NameKey(endpointKind, name, nil)
+	key.Namespace = endpointNamespace
 
 	return key
 }
 
 // Save saves an endpoint to datastore
-func (ep *Stats) Save(client datastore.Client, key string) error {
-	ctx := context.Background()
-
+func (ep *Stats) Save(ctx context.Context, client datastore.Client, key string) error {
 	// Sets the kind for the new entity.
-	kind := "requests"
 	// Creates a Key instance.
-	dsKey := datastore.NameKey(kind, key, nil)
-	dsKey.Namespace = "endpoint_stats"
+	dsKey := datastore.NameKey(endpointKind, key, nil)
+	dsKey.Namespace = endpointNamespace
 
 	// Saves the new entity.
 	if _, err := client.Put(ctx, dsKey, &ep); err != nil {
@@ -85,15 +78,7 @@ func (ep *Stats) Save(client datastore.Client, key string) error {
 	return nil
 }
 
-func Saveall(client *datastore.Client, keys []*datastore.Key, stats []Stats) error {
-	ctx := context.Background()
-
-	// Saves the new entity.
-	_, err := client.PutMulti(ctx, keys, stats)
-	return err
-}
-
-// MakeKeysAndStats converts bigquery rows into DSKeys and Stats objects.
+// MakeKeysAndStats converts slice of bigquery rows into DSKeys and Stats objects.
 func MakeKeysAndStats(rows []map[string]bigquery.Value, threshold int64) ([]*datastore.Key, []Stats, error) {
 	keys := make([]*datastore.Key, 0, 200)
 	endpoints := make([]Stats, 0, 200)
@@ -110,10 +95,11 @@ func MakeKeysAndStats(rows []map[string]bigquery.Value, threshold int64) ([]*dat
 	return keys, endpoints, nil
 }
 
-// QueryAndFetch executes a query that should return one ore more rows
-// TODO - move this into go/bqext
-func QueryAndFetch(dsExt *bqext.Dataset, threshold int64) ([]map[string]bigquery.Value, error) {
-	query := dsExt.ResultQuery(SimpleQuery, false)
+// FetchEndpointStats executes simpleQuery, and returns a slice of rows containing
+// endpoint signatures and request counts.
+// TODO - move the body (excluding simpleQuery) into go/bqext
+func FetchEndpointStats(dsExt *bqext.Dataset, threshold int64) ([]map[string]bigquery.Value, error) {
+	query := dsExt.ResultQuery(simpleQuery, false)
 	it, err := query.Read(context.Background())
 	if err != nil {
 		return nil, err
@@ -127,95 +113,40 @@ func QueryAndFetch(dsExt *bqext.Dataset, threshold int64) ([]map[string]bigquery
 		row = make(map[string]bigquery.Value, 20)
 	}
 	if err != iterator.Done {
-		return nil, errors.New("multiple row data")
+		return nil, err
 	}
 
 	return rows, nil
 }
 
 // GetAllKeys fetches all keys from Datastore for a namespace and kind.
-func GetAllKeys(client *datastore.Client, namespace string, kind string) ([]*datastore.Key, error) {
+func GetAllKeys(ctx context.Context, client *datastore.Client, namespace string, kind string) ([]*datastore.Key, error) {
 	query := datastore.NewQuery(kind).Namespace(namespace)
 	query = query.KeysOnly()
 
-	ctx := context.Background()
 	return client.GetAll(ctx, query, nil)
 }
 
 // DeleteAllKeys deletes all keys for a namespace and kind from Datastore.
-func DeleteAllKeys(client *datastore.Client, namespace string, kind string) error {
-	qkeys, err := GetAllKeys(client, namespace, kind)
+func DeleteAllKeys(ctx context.Context, client *datastore.Client, namespace string, kind string) (int, error) {
+	qkeys, err := GetAllKeys(ctx, client, namespace, kind)
 	if err != nil {
-		return err
+		return 0, err
 	}
-
-	ctx := context.Background()
 
 	err = client.DeleteMulti(ctx, qkeys)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	log.Println("Deleted", len(qkeys), "keys from datastore.")
 
-	return nil
+	return len(qkeys), nil
 }
 
-var Query1 = `select *,
-regexp_extract(resource, "/([^?]+)") as path,
-regexp_extract(resource, "[?&]?format=([^&]+)") as format,
-regexp_extract(resource, "[?&]+policy=([^&]+)") as policy,
-regexp_extract(resource, "[?&]+address_family=([^&]+)") as af,
-regexp_extract(resource, "[?&]+ip=([^&]+)") as ip_param,
-regexp_extract(resource, "[?&]+metro=([^&]+)") as metro,
-cast(regexp_extract(resource, "[?&]+lat[a-z]*=([^&]+)") as float64) as lat,
-cast(regexp_extract(resource, "[?&]+lon[a-z]*=([^&]+)") as float64) as long,
-regexp_extract(userAgent, "([a-zA-Z0-9_/.+-]+)") as agent
-from
-(
-SELECT count(*) as tests,
-protoPayload.ip,
-protopayload.userAgent,
-protoPayload.resource
-FROM ` + "`mlab-ns.exports.appengine_googleapis_com_request_log_20180718`" + `
-group by ip, userAgent, resource
-)
-where tests > 48
-group by ip, ip_param, userAgent, resource, tests
-order by tests DESC
-`
-
-var Query = `SELECT
-regexp_extract(userAgent, "([a-zA-Z0-9_/.+-]+)") AS AgentPrefix,
-regexp_extract(resource, "/([^?]+)") AS Path,
-RequesterIP,
-regexp_extract(resource, "[?&]+ip=([^&]+)") AS IPParam,
-resource, userAgent,
-RequestsPerDay,
-regexp_extract(resource, "[?&]?format=([^&]+)") AS Format,
-regexp_extract(resource, "[?&]+policy=([^&]+)") AS Policy,
-regexp_extract(resource, "[?&]+address_family=([^&]+)") AS AF,
-regexp_extract(resource, "[?&]+metro=([^&]+)") AS Metro,
-cast(regexp_extract(resource, "[?&]+lat[a-z]*=([^&]+)") as float64) AS Latitude,
-cast(regexp_extract(resource, "[?&]+lon[a-z]*=([^&]+)") as float64) AS Longitude
-FROM
-(
-SELECT
-protopayload.userAgent,
-protoPayload.resource,
-count(*) as RequestsPerDay,
-protoPayload.ip as RequesterIP
-FROM ` + "`mlab-ns.exports.appengine_googleapis_com_request_log_*`" + `
-WHERE (_table_suffix = '20180720'
-OR _table_suffix = '20180721')
-AND protoPayload.starttime > "2018-07-20 12:00:00"
-AND protoPayload.starttime < "2018-07-21 12:00:00"
-GROUP BY RequesterIP, userAgent, resource
-)
-WHERE RequestsPerDay > 6
-GROUP BY RequesterIP, IPParam, userAgent, resource, RequestsPerDay
-ORDER BY RequestsPerDay DESC`
-
-var SimpleQuery = `SELECT RequesterIP, resource, userAgent, RequestsPerDay
+// simpleQuery queries the stackdriver request log table, and extracts the count
+// of requests from each requester signature (RequesterIP, userAgent, request (resource) string)
+var simpleQuery = `
+SELECT RequesterIP, resource, userAgent, RequestsPerDay
 FROM
 (
 SELECT
