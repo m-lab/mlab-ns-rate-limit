@@ -12,6 +12,12 @@ import (
 	"github.com/m-lab/mlab-ns-rate-limit/endpoint"
 )
 
+func init() {
+	// Always prepend the filename and line number.
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+}
+
+// getClient creates a test client that uses mlab-testing project.
 func getClient() (*datastore.Client, error) {
 	ctx := context.Background()
 	projectID := "mlab-testing"
@@ -43,12 +49,13 @@ func TestDeleteAllKeys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(qkeys) != 0 {
+	if len(qkeys) > 0 {
 		t.Error("Expected zero keys, found:", len(qkeys))
 	}
-
 }
 
+// NOTE: This test depends on the real data in the mlab-ns logs.  If the number of
+// ill-behaved clients drops, this test may start failing.
 func TestCreateTestEntries(t *testing.T) {
 	// This test queries the real mlab-ns stackdriver table, so we skip it when
 	// test is invoked with -short
@@ -93,16 +100,11 @@ func TestCreateTestEntries(t *testing.T) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	err = client.DeleteMulti(ctx, keys)
+	// This is OK, because we are using client ProjectID mlab-testing.
+	_, err = endpoint.DeleteAllKeys(ctx, client, "endpoint_stats", "requests")
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	qkeys, err := endpoint.GetAllKeys(ctx, client, "endpoint_stats", "requests")
-	if err != nil {
-		log.Fatal(err)
-	}
-	log.Println("Found", len(qkeys))
 
 	// Saves the new entity.
 	_, err = client.PutMulti(ctx, keys, endpoints)
@@ -110,4 +112,13 @@ func TestCreateTestEntries(t *testing.T) {
 		log.Fatalf("Failed: %v", err)
 	}
 	log.Println("Wrote", len(keys), "of", len(rows))
+
+	found, err := endpoint.GetAllKeys(ctx, client, "endpoint_stats", "requests")
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println("Found", len(found))
+	if len(found) != len(keys) {
+		t.Error("Expected", len(keys), "Found", len(found))
+	}
 }

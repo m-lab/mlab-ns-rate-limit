@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 
 	"cloud.google.com/go/bigquery"
 	"cloud.google.com/go/datastore"
@@ -99,7 +100,8 @@ func MakeKeysAndStats(rows []map[string]bigquery.Value, threshold int64) ([]*dat
 // endpoint signatures and request counts.
 // TODO - move the body (excluding simpleQuery) into go/bqext
 func FetchEndpointStats(dsExt *bqext.Dataset, threshold int64) ([]map[string]bigquery.Value, error) {
-	query := dsExt.ResultQuery(simpleQuery, false)
+	qString := strings.Replace(simpleQuery, "${THRESHOLD}", fmt.Sprint(threshold), 1)
+	query := dsExt.ResultQuery(qString, false)
 	it, err := query.Read(context.Background())
 	if err != nil {
 		return nil, err
@@ -161,6 +163,6 @@ AND protoPayload.starttime > "2018-07-20 12:00:00"
 AND protoPayload.starttime < "2018-07-21 12:00:00"
 GROUP BY RequesterIP, userAgent, resource
 )
-WHERE RequestsPerDay > 6
+WHERE RequestsPerDay > ${THRESHOLD}
 GROUP BY RequesterIP, userAgent, resource, RequestsPerDay
 ORDER BY RequestsPerDay DESC`
