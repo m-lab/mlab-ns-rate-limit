@@ -20,6 +20,16 @@ before_install:
 - $TRAVIS_BUILD_DIR/travis/install_gcloud.sh app-engine-python app-engine-go
 - source "${HOME}/google-cloud-sdk/path.bash.inc"
 
+# Install test credentials.
+# All of the gcloud library calls will detect the GOOGLE_APPLICATION_CREDENTIALS
+# environment variable, and use that file for authentication.
+# If the application requires authentication outside the libraries, consider
+# also using travis/activate_service_account.sh
+- if [[ -n "$SERVICE_ACCOUNT_mlab_testing" ]] ; then
+  echo "$SERVICE_ACCOUNT_mlab_testing" > $TRAVIS_BUILD_DIR/creds.json ;
+  export GOOGLE_APPLICATION_CREDENTIALS=$TRAVIS_BUILD_DIR/creds.json ;
+  fi
+
 before_script:
 # Try removing boto config, recommended for datastore emulator.
 - sudo rm -f /etc/boto.cfg

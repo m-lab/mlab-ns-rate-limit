@@ -3,6 +3,7 @@ package rate_table_test
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"testing"
 
 	"google.golang.org/appengine"
@@ -11,6 +12,11 @@ import (
 
 	"github.com/m-lab/mlab-ns-rate-limit/endpoint"
 )
+
+func init() {
+	// Always prepend the filename and line number.
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+}
 
 var (
 	gctx context.Context
