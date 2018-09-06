@@ -44,12 +44,12 @@ func TestDeleteAllKeys(t *testing.T) {
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	_, err = endpoint.DeleteAllKeys(ctx, client, "endpoint_stats", "requests")
+	_, err = endpoint.DeleteAllKeys(ctx, client, "endpoint_stats", "Requests")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	qkeys, err := endpoint.GetAllKeys(ctx, client, "endpoint_stats", "requests")
+	qkeys, err := endpoint.GetAllKeys(ctx, client, "endpoint_stats", "Requests")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +95,7 @@ func TestCreateTestEntries(t *testing.T) {
 	defer cancel()
 
 	// This is OK, because we are using client ProjectID mlab-testing.
-	_, err = endpoint.DeleteAllKeys(ctx, client, "endpoint_stats", "requests")
+	_, err = endpoint.DeleteAllKeys(ctx, client, "endpoint_stats", "Requests")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -111,7 +111,7 @@ func TestCreateTestEntries(t *testing.T) {
 	var found []*datastore.Key
 	for delay := 33 * time.Millisecond; delay < time.Second; delay = 2 * delay {
 		time.Sleep(delay)
-		found, err = endpoint.GetAllKeys(ctx, client, "endpoint_stats", "requests")
+		found, err = endpoint.GetAllKeys(ctx, client, "endpoint_stats", "Requests")
 		if err != nil {
 			log.Fatal(err)
 		}

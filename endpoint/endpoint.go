@@ -17,15 +17,15 @@ import (
 )
 
 const (
-	endpointKind      = "requests"
+	endpointKind      = "Requests"
 	endpointNamespace = "endpoint_stats"
 )
 
 // Stats contains information about request rate for an endpoint, and probability
 // for mlab-ns to use in routing new requests.
 type Stats struct {
-	RequestsPerDay int64   // Number of requests made per day.
-	Probability    float32 // Fraction of requests that should be sent to standard backend.
+	RequestsPerDay int64   `datastore:"requests_per_day"` // Number of requests made per day.
+	Probability    float32 `datastore:"probability"`      // Fraction of requests that should be sent to standard backend.
 }
 
 // StatsFromMap creates a Key and Stats object from a bigquery row.
