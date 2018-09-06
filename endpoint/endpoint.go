@@ -1,7 +1,7 @@
 // Package endpoint contains stats for client endpoints.  An endpoint corresponds
 // to an mlab-ns request signature that we expect may represent an individual
 // requester endpoint.  (IP alone is insufficient, because of CG-NAT and use
-// of proxies).  Currently, we use the useAgent, resource string, and IP address.
+// of proxies).  We use the useAgent, resource string, and IP address.
 package endpoint
 
 import (

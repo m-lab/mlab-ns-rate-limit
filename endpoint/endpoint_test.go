@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"log"
 	"os"
 	"testing"
@@ -107,7 +106,8 @@ func TestCreateTestEntries(t *testing.T) {
 		log.Fatalf("Failed: %v", err)
 	}
 
-	// Even the datastore emulator takes a little while to become consistent...
+	// Even the datastore emulator takes a little while to become consistent, so
+	// backoff until success, up to about 1 second.
 	var found []*datastore.Key
 	for delay := 33 * time.Millisecond; delay < time.Second; delay = 2 * delay {
 		time.Sleep(delay)
@@ -131,16 +131,23 @@ func TestRowGenerator(t *testing.T) {
 	if len(rows) != 10 {
 		t.Error("Should be 10 rows, got", len(rows))
 	}
+	compare, err := json.Marshal(rows)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Compare(compare, jsonTestRows) != 0 {
+		t.Error("json not identical")
+	}
 }
 
 func testRows() ([]map[string]bigquery.Value, error) {
-	jsonRows := []byte(`[{"RequesterIP":"0.1.0.1","RequestsPerDay":4494,"resource":"/cron/check_status","userAgent":"AppEngine-Google; (+http://code.google.com/appengine)"},{"RequesterIP":"2601:406:302:6a50:b2fc:dff:fec8:eaad","RequestsPerDay":1883,"resource":"/ndt_ssl?policy=geo_options","userAgent":"Dalvik/2.1.0 (Linux; U; Android 5.1.1; AFTT Build/LVY48F)"},{"RequesterIP":"24.214.47.89","RequestsPerDay":1858,"resource":"/ndt?policy=geo_options","userAgent":"Dalvik/2.1.0 (Linux; U; Android 5.1.1; AFTT Build/LVY48F)"},{"RequesterIP":"2600:1700:4ef0:e10:b67c:9cff:fe54:4c08","RequestsPerDay":1834,"resource":"/ndt_ssl?policy=geo_options","userAgent":"Dalvik/2.1.0 (Linux; U; Android 5.1.1; AFTT Build/LVY48F)"},{"RequesterIP":"98.28.34.74","RequestsPerDay":1791,"resource":"/ndt?policy=geo_options","userAgent":"Dalvik/2.1.0 (Linux; U; Android 5.1.1; AFTT Build/LVY48F)"},{"RequesterIP":"24.165.204.134","RequestsPerDay":1531,"resource":"/ndt_ssl?policy=geo_options","userAgent":"Dalvik/2.1.0 (Linux; U; Android 5.1.1; AFTT Build/LVY48F)"},{"RequesterIP":"2600:8801:2d04:4e00:2fc:8bff:fe30:94dd","RequestsPerDay":1398,"resource":"/ndt_ssl?policy=geo_options","userAgent":"Dalvik/2.1.0 (Linux; U; Android 5.1.1; AFTT Build/LVY48F)"},{"RequesterIP":"209.107.214.55","RequestsPerDay":1371,"resource":"/ndt_ssl?policy=geo_options","userAgent":"Dalvik/2.1.0 (Linux; U; Android 5.1.1; AFTT Build/LVY48F)"},{"RequesterIP":"2604:2d80:840a:84b9:2fc:8bff:fe23:7760","RequestsPerDay":1345,"resource":"/ndt_ssl?policy=geo_options","userAgent":"Dalvik/2.1.0 (Linux; U; Android 5.1.1; AFTT Build/LVY48F)"},{"RequesterIP":"96.19.226.136","RequestsPerDay":1323,"resource":"/ndt?policy=geo_options","userAgent":"Dalvik/2.1.0 (Linux; U; Android 5.1.1; AFTT Build/LVY48F)"}]`)
 	rows := make([]map[string]bigquery.Value, 0, 20)
-	err := json.Unmarshal(jsonRows, &rows)
+	err := json.Unmarshal(jsonTestRows, &rows)
 
 	if err != nil {
 		return nil, err
 	}
+	// Actual BQ result has int64, not float64, so convert those fields.
 	for i := range rows {
 		for k := range rows[i] {
 			switch v := rows[i][k].(type) {
@@ -149,15 +156,9 @@ func testRows() ([]map[string]bigquery.Value, error) {
 				rows[i][k] = int64(v)
 			default:
 			}
-
 		}
-	}
-	compare, err := json.Marshal(rows)
-	if err != nil {
-		return nil, err
-	}
-	if bytes.Compare(compare, jsonRows) != 0 {
-		return nil, errors.New("json not identical")
 	}
 	return rows, nil
 }
+
+var jsonTestRows = []byte(`[{"RequesterIP":"0.1.0.1","RequestsPerDay":4494,"resource":"/cron/check_status","userAgent":"AppEngine-Google; (+http://code.google.com/appengine)"},{"RequesterIP":"2601:406:302:6a50:b2fc:dff:fec8:eaad","RequestsPerDay":1883,"resource":"/ndt_ssl?policy=geo_options","userAgent":"Dalvik/2.1.0 (Linux; U; Android 5.1.1; AFTT Build/LVY48F)"},{"RequesterIP":"24.214.47.89","RequestsPerDay":1858,"resource":"/ndt?policy=geo_options","userAgent":"Dalvik/2.1.0 (Linux; U; Android 5.1.1; AFTT Build/LVY48F)"},{"RequesterIP":"2600:1700:4ef0:e10:b67c:9cff:fe54:4c08","RequestsPerDay":1834,"resource":"/ndt_ssl?policy=geo_options","userAgent":"Dalvik/2.1.0 (Linux; U; Android 5.1.1; AFTT Build/LVY48F)"},{"RequesterIP":"98.28.34.74","RequestsPerDay":1791,"resource":"/ndt?policy=geo_options","userAgent":"Dalvik/2.1.0 (Linux; U; Android 5.1.1; AFTT Build/LVY48F)"},{"RequesterIP":"24.165.204.134","RequestsPerDay":1531,"resource":"/ndt_ssl?policy=geo_options","userAgent":"Dalvik/2.1.0 (Linux; U; Android 5.1.1; AFTT Build/LVY48F)"},{"RequesterIP":"2600:8801:2d04:4e00:2fc:8bff:fe30:94dd","RequestsPerDay":1398,"resource":"/ndt_ssl?policy=geo_options","userAgent":"Dalvik/2.1.0 (Linux; U; Android 5.1.1; AFTT Build/LVY48F)"},{"RequesterIP":"209.107.214.55","RequestsPerDay":1371,"resource":"/ndt_ssl?policy=geo_options","userAgent":"Dalvik/2.1.0 (Linux; U; Android 5.1.1; AFTT Build/LVY48F)"},{"RequesterIP":"2604:2d80:840a:84b9:2fc:8bff:fe23:7760","RequestsPerDay":1345,"resource":"/ndt_ssl?policy=geo_options","userAgent":"Dalvik/2.1.0 (Linux; U; Android 5.1.1; AFTT Build/LVY48F)"},{"RequesterIP":"96.19.226.136","RequestsPerDay":1323,"resource":"/ndt?policy=geo_options","userAgent":"Dalvik/2.1.0 (Linux; U; Android 5.1.1; AFTT Build/LVY48F)"}]`)
