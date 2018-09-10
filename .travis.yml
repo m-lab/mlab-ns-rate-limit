@@ -41,6 +41,9 @@ before_script:
 - gcloud components install cloud-datastore-emulator
 - gcloud beta emulators datastore start --no-store-on-disk &
 - sleep 2 # allow time for emulator to start up.
+# This sets up the DATASTORE_ env vars.  For emulator (at least on travis), they look
+# like localhost:8081..., or eco-emissary-NNNNN.
+# NOTE: if you run emulator locally, you can unset with $(gcloud beta emulators datastore env-unset)
 - gcloud beta emulators datastore env-init # So we can see values in travis log.
 - $(gcloud beta emulators datastore env-init)
 
