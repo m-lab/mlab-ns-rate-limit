@@ -6,7 +6,6 @@ import (
 	"log"
 	"testing"
 
-	"cloud.google.com/go/datastore"
 	"google.golang.org/appengine"
 	"google.golang.org/appengine/aetest"
 	"google.golang.org/appengine/memcache"
@@ -14,33 +13,9 @@ import (
 	"github.com/m-lab/mlab-ns-rate-limit/endpoint"
 )
 
-func xTestDSEntity(t *testing.T) {
-	ctx := context.Background()
-
-	// Set your Google Cloud Platform project ID.
-	projectID := "mlab-nstesting"
-
-	// Creates a client.
-	client, err := datastore.NewClient(ctx, projectID)
-	if err != nil {
-		log.Fatalf("Failed to create client: %v", err)
-	}
-	// Sets the kind for the new entity.
-	kind := "requests"
-	// Sets the name/ID for the new entity.
-	//       127.0.0.1#Davlik 2.1.0 (blah blah blah)#ndt_ssl#format#geo_options#af#ip#metro#lat#lon"
-	name := "127.0.0.1#Davlik 2.1.0 (blah blah blah)#ndt_ssl##geo_options#####"
-	// Creates a Key instance.
-	key := datastore.NameKey(kind, name, nil)
-	key.Namespace = "endpoint_stats"
-
-	// Creates a Task instance.
-	ep := endpoint.Stats{}
-
-	// Saves the new entity.
-	if _, err := client.Put(ctx, key, &ep); err != nil {
-		log.Fatalf("Failed to save task: %v", err)
-	}
+func init() {
+	// Always prepend the filename and line number.
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
 }
 
 var (
@@ -56,7 +31,8 @@ func Inner(b *testing.B) {
 	}
 }
 
-// This shows that memcache read, with aetest environment, takes about 400 usec.
+// This runs against aetest local environment, and shows that memcache hit takes about 400 usec.
+// In actual standard appengine environment, it is generally a bit over 1 msec/hit.
 func BenchmarkMemcacheGet(b *testing.B) {
 	ctx, done, err := aetest.NewContext()
 	if err != nil {

@@ -20,6 +20,33 @@ before_install:
 - $TRAVIS_BUILD_DIR/travis/install_gcloud.sh app-engine-python app-engine-go
 - source "${HOME}/google-cloud-sdk/path.bash.inc"
 
+# Install test credentials.
+# All of the gcloud library calls will detect the GOOGLE_APPLICATION_CREDENTIALS
+# environment variable, and use that file for authentication.
+# If the application requires authentication outside the libraries, consider
+# also using travis/activate_service_account.sh
+# NOTE: We have added cross project permissions, allowing bigquery jobs against mlab-ns.
+- if [[ -n "$SERVICE_ACCOUNT_mlab_testing" ]] ; then
+  echo "$SERVICE_ACCOUNT_mlab_testing" > $TRAVIS_BUILD_DIR/creds.json ;
+  export GOOGLE_APPLICATION_CREDENTIALS=$TRAVIS_BUILD_DIR/creds.json ;
+  fi
+
+before_script:
+# Try removing boto config, recommended for datastore emulator.
+# boto provides a python API for AWS, so it seems strange that this matters, but emulator
+# doesn't work without this line.
+- sudo rm -f /etc/boto.cfg
+
+- gcloud components install beta
+- gcloud components install cloud-datastore-emulator
+- gcloud beta emulators datastore start --no-store-on-disk &
+- sleep 2 # allow time for emulator to start up.
+# This sets up the DATASTORE_ env vars.  For emulator (at least on travis), they look
+# like localhost:8081..., or eco-emissary-NNNNN.
+# NOTE: if you run emulator locally, you can unset with $(gcloud beta emulators datastore env-unset)
+- gcloud beta emulators datastore env-init # So we can see values in travis log.
+- $(gcloud beta emulators datastore env-init)
+
 script:
 # Run query "unit tests".
 - go test -v ./... -bench=.
