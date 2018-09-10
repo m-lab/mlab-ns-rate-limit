@@ -1,7 +1,7 @@
 // Package endpoint contains stats for client endpoints.  An endpoint corresponds
 // to an mlab-ns request signature that we expect may represent an individual
-// requester endpoint.  (IP alone is insufficient, because of CG-NAT and use
-// of proxies).  We use the useAgent, resource string, and IP address.
+// requester.  (IP alone is insufficient, because of CG-NAT and use
+// of proxies).  We use the userAgent, resource string, and IP address.
 package endpoint
 
 import (
@@ -17,18 +17,18 @@ import (
 )
 
 const (
-	endpointKind      = "requests"
+	endpointKind      = "Requests"
 	endpointNamespace = "endpoint_stats"
 )
 
 // Stats contains information about request rate for an endpoint, and probability
 // for mlab-ns to use in routing new requests.
 type Stats struct {
-	RequestsPerDay int64   // Number of requests made per day.
-	Probability    float32 // Fraction of requests that should be sent to standard backend.
+	RequestsPerDay int64   `datastore:"requests_per_day"` // Number of requests made per day.
+	Probability    float32 `datastore:"probability"`      // Fraction of requests that should be sent to standard backend.
 }
 
-// StatsFromMap creates a Key and Stats object from a bigquery row.
+// StatsFromMap creates a Key and Stats object from a bigquery result map.
 func StatsFromMap(row map[string]bigquery.Value) (string, Stats) {
 	var stats Stats
 	rpd, ok := row["RequestsPerDay"]
@@ -83,11 +83,9 @@ func (ep *Stats) Save(ctx context.Context, client datastore.Client, key string) 
 func MakeKeysAndStats(rows []map[string]bigquery.Value, threshold int64) ([]*datastore.Key, []Stats, error) {
 	keys := make([]*datastore.Key, 0, 200)
 	endpoints := make([]Stats, 0, 200)
-	count := 0
 	for i := range rows {
 		key, ep := StatsFromMap(rows[i])
 		if ep.RequestsPerDay >= threshold {
-			count++
 			endpoints = append(endpoints, ep)
 			keys = append(keys, DSKey(key))
 		}
@@ -108,11 +106,11 @@ func FetchEndpointStats(dsExt *bqext.Dataset, threshold int64) ([]map[string]big
 	}
 
 	var rows = make([]map[string]bigquery.Value, 0, 1000)
-	row := make(map[string]bigquery.Value, 20)
+	newRow := make(map[string]bigquery.Value, 20)
 
-	for err = it.Next(&row); err == nil; err = it.Next(&row) {
-		rows = append(rows, row)
-		row = make(map[string]bigquery.Value, 20)
+	for err = it.Next(&newRow); err == nil; err = it.Next(&newRow) {
+		rows = append(rows, newRow)
+		newRow = make(map[string]bigquery.Value, 20)
 	}
 	if err != iterator.Done {
 		return nil, err
@@ -148,21 +146,22 @@ func DeleteAllKeys(ctx context.Context, client *datastore.Client, namespace stri
 // simpleQuery queries the stackdriver request log table, and extracts the count
 // of requests from each requester signature (RequesterIP, userAgent, request (resource) string)
 var simpleQuery = `
-SELECT RequesterIP, resource, userAgent, RequestsPerDay
-FROM
-(
 SELECT
-protopayload.userAgent,
-protoPayload.resource,
-count(*) as RequestsPerDay,
-protoPayload.ip as RequesterIP
-FROM ` + "`mlab-ns.exports.appengine_googleapis_com_request_log_*`" + `
-WHERE (_table_suffix = '20180720'
-OR _table_suffix = '20180721')
-AND protoPayload.starttime > "2018-07-20 12:00:00"
-AND protoPayload.starttime < "2018-07-21 12:00:00"
-GROUP BY RequesterIP, userAgent, resource
-)
-WHERE RequestsPerDay > ${THRESHOLD}
-GROUP BY RequesterIP, userAgent, resource, RequestsPerDay
-ORDER BY RequestsPerDay DESC`
+  RequesterIP, resource, userAgent, RequestsPerDay
+FROM (
+  SELECT
+    protopayload.userAgent, protoPayload.resource, COUNT(*) AS RequestsPerDay, protoPayload.ip AS RequesterIP
+  FROM
+    ` + "`mlab-ns.exports.appengine_googleapis_com_request_log_*`" + `
+  WHERE
+    (_table_suffix = '20180720' OR _table_suffix = '20180721')
+    AND protoPayload.starttime > "2018-07-20 12:00:00"
+    AND protoPayload.starttime < "2018-07-21 12:00:00"
+  GROUP BY
+    RequesterIP, userAgent, resource )
+WHERE
+  RequestsPerDay > ${THRESHOLD}
+GROUP BY
+  RequesterIP, userAgent, resource, RequestsPerDay
+ORDER BY
+  RequestsPerDay DESC`
