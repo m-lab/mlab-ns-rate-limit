@@ -80,15 +80,14 @@ func (ep *Stats) Save(ctx context.Context, client datastore.Client, key string) 
 }
 
 // MakeKeysAndStats converts slice of bigquery rows into DSKeys and Stats objects.
-func MakeKeysAndStats(rows []map[string]bigquery.Value, threshold int64) ([]*datastore.Key, []Stats, error) {
-	keys := make([]*datastore.Key, 0, 200)
-	endpoints := make([]Stats, 0, 200)
+func MakeKeysAndStats(rows []map[string]bigquery.Value) ([]*datastore.Key, []Stats, error) {
+	// preallocate to match number of rows, to avoid reallocation.
+	keys := make([]*datastore.Key, 0, len(rows))
+	endpoints := make([]Stats, 0, len(rows))
 	for i := range rows {
 		key, ep := StatsFromMap(rows[i])
-		if ep.RequestsPerDay >= threshold {
-			endpoints = append(endpoints, ep)
-			keys = append(keys, DSKey(key))
-		}
+		endpoints = append(endpoints, ep)
+		keys = append(keys, DSKey(key))
 	}
 
 	return keys, endpoints, nil
@@ -99,6 +98,8 @@ func MakeKeysAndStats(rows []map[string]bigquery.Value, threshold int64) ([]*dat
 // TODO - move the body (excluding simpleQuery) into go/bqext
 func FetchEndpointStats(dsExt *bqext.Dataset, threshold int64) ([]map[string]bigquery.Value, error) {
 	qString := strings.Replace(simpleQuery, "${THRESHOLD}", fmt.Sprint(threshold), 1)
+	qString = strings.Replace(qString, "${DATE}", fmt.Sprint(threshold), 1)
+
 	query := dsExt.ResultQuery(qString, false)
 	it, err := query.Read(context.Background())
 	if err != nil {
@@ -154,9 +155,9 @@ FROM (
   FROM
     ` + "`mlab-ns.exports.appengine_googleapis_com_request_log_*`" + `
   WHERE
-    (_table_suffix = '20180720' OR _table_suffix = '20180721')
-    AND protoPayload.starttime > "2018-07-20 12:00:00"
-    AND protoPayload.starttime < "2018-07-21 12:00:00"
+    (_table_suffix = FORMAT_DATE("%Y%m%d", CURRENT_DATE())
+    OR _table_suffix = FORMAT_DATE("%Y%m%d", DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)))
+    AND protoPayload.starttime > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 DAY)
   GROUP BY
     RequesterIP, userAgent, resource )
 WHERE

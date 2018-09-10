@@ -13,6 +13,7 @@ import (
 
 	"cloud.google.com/go/bigquery"
 	"cloud.google.com/go/datastore"
+	"github.com/m-lab/go/bqext"
 	"github.com/m-lab/mlab-ns-rate-limit/endpoint"
 )
 
@@ -60,14 +61,36 @@ func TestDeleteAllKeys(t *testing.T) {
 
 // NOTE: This test depends on the real data in the mlab-ns logs.  If the number of
 // ill-behaved clients drops, this test may start failing.
-func TestCreateTestEntries(t *testing.T) {
-	// This test queries the real mlab-ns stackdriver table, so we skip it when
-	// test is invoked with -short
-	if testing.Short() {
-		log.Println("Skipping TestCreateTestEntries")
-		return
+func TestLiveBQQuery(t *testing.T) {
+	testLive, _ := os.LookupEnv("TEST_LIVE_BQ")
+	if testLive != "true" {
+		t.Skip("Skipping - set TEST_LIVE_BQ to run")
 	}
 
+	// Using the real mlab-ns table!
+	dsExt, err := bqext.NewDataset("mlab-ns", "exports")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Fetch all client signatures with more than 200 requests in past day.
+	rows, err := endpoint.FetchEndpointStats(&dsExt, 200)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	keys, _, err := endpoint.MakeKeysAndStats(rows)
+	if err != nil {
+		log.Fatalf("Failed: %v", err)
+	}
+	log.Println(len(keys), "rows over threshold")
+	// Test is meaningless if there are no interesting clients
+	if len(keys) < 10 {
+		t.Fatal("Not enough high rate clients", len(keys))
+	}
+
+}
+
+func TestCreateTestEntries(t *testing.T) {
 	var rows []map[string]bigquery.Value
 	var err error
 	rows, err = testRows()
@@ -75,7 +98,7 @@ func TestCreateTestEntries(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	keys, endpoints, err := endpoint.MakeKeysAndStats(rows, 300)
+	keys, endpoints, err := endpoint.MakeKeysAndStats(rows)
 	if err != nil {
 		log.Fatalf("Failed: %v", err)
 	}
