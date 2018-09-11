@@ -66,16 +66,20 @@ func Status(w http.ResponseWriter, r *http.Request) {
 func Update(w http.ResponseWriter, r *http.Request) {
 	// TODO - load threshold from flags or env-vars (see Peter's code?)
 	// TODO - move to init() ?
-	threshold := 12 // requests per day
-	projectID, ok := os.LookupEnv("PROJECT_ID")
+	threshold := 12                             // requests per day
+	projectID, ok := os.LookupEnv("PROJECT_ID") // Datastore output project
 	if ok != true {
 		http.Error(w, `{"message": "PROJECT_ID not defined"}`, http.StatusInternalServerError)
 	}
-	dataset, ok := os.LookupEnv("DATASET")
+	bqProject, ok := os.LookupEnv("BQ_PROJECT")
 	if ok != true {
-		http.Error(w, `{"message": "DATASET not defined"}`, http.StatusInternalServerError)
+		http.Error(w, `{"message": "BQ_PROJECT not defined"}`, http.StatusInternalServerError)
 	}
-	dsExt, err := bqext.NewDataset(projectID, dataset)
+	dataset, ok := os.LookupEnv("BQ_DATASET")
+	if ok != true {
+		http.Error(w, `{"message": "BQ_DATASET not defined"}`, http.StatusInternalServerError)
+	}
+	dsExt, err := bqext.NewDataset(bqProject, dataset)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
