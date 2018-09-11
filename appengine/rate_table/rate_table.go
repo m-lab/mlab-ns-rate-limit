@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"os"
 
+	"foobar.cloud.google.com/datastore"
+	"github.com/m-lab/go/bqext"
 	"github.com/m-lab/mlab-ns-rate-limit/endpoint"
 	"google.golang.org/appengine"
 	"google.golang.org/appengine/memcache"
@@ -35,6 +37,7 @@ func init() {
 	http.HandleFunc("/", defaultHandler)
 	http.HandleFunc("/benchmark", benchmark)
 	http.HandleFunc("/status", Status)
+	http.HandleFunc("/update", Update)
 }
 
 // Status writes an instance summary into the response.
@@ -56,6 +59,51 @@ func Status(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "%s</br>\n", env[i])
 	}
 	fmt.Fprintf(w, "</body></html>\n")
+}
+
+// Update pulls new data from BigQuery, and pushes updated key/value pairs
+// and bloom filter to memcache and datastore.
+func Update(w http.ResponseWriter, r *http.Request) {
+	// TODO - load threshold from flags or env-vars (see Peter's code?)
+	// TODO - move to init() ?
+	threshold = 12 // requests per day
+	projectID, ok := os.Getenv("PROJECT_ID")
+	if ok != true {
+		http.Error(w, `{"message": "PROJECT_ID not defined"}`, http.StatusInternalServerError)
+	}
+	dataset, ok := os.Getenv("DATASET")
+	if ok != true {
+		http.Error(w, `{"message": "DATASET not defined"}`, http.StatusInternalServerError)
+	}
+	dsExt, err := bqext.NewDataset(projectID, dataset)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+	// Fetch all client signatures that exceed threshold
+	rows, err := endpoint.FetchEndpointStats(&dsExt, threshold)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+
+	keys, stats, err := endpoint.MakeKeysAndStats(rows)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+
+	// Save all the keys
+	ctx := context.Background()
+	client, err := datastore.NewClient(ctx, projectID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+	_, err = client.PutMulti(ctx, keys, endpoints)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+
+	// TODO - clean up obsolete endpoints
+	// TODO - handle bloom filter
+	// TODO - update memcache
 }
 
 const defaultMessage = "<html><body>This is not the app you're looking for.</body></html>"
