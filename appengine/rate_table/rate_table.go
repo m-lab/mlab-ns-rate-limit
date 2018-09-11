@@ -104,7 +104,7 @@ func Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Save all the keys
-	ctx := context.Background()
+	ctx := appengine.NewContext(r)
 	client, err := datastore.NewClient(ctx, projectID)
 	if err != nil {
 		log.Println(err)
