@@ -12,10 +12,6 @@ cache:
     - "$HOME/google-cloud-sdk/"
 
 before_install:
-#- export SUBST_TAGS='\$TRAVIS_TAG, \$TRAVIS_COMMIT, \$PROJECT_ID, \$BQ_PROJECT, \$BQ_DATASET' &&
-- export SUBST_TAGS=`echo "%TRAVIS_TAG, %TRAVIS_COMMIT" | sed "s/%/$/g"` &&
-  echo $SUBST_TAGS
-
 # Coverage tools
 - go get github.com/mattn/goveralls
 - go get github.com/wadey/gocovmerge
@@ -66,7 +62,7 @@ deploy:
     export PROJECT_ID="mlab-nstesting" &&
     export BQ_PROJECT="mlab-ns" &&
     export BQ_DATASET="exports" &&
-    export SUBST_TAGS="'$TRAVIS_TAG, $TRAVIS_COMMIT, $PROJECT_ID, $BQ_PROJECT, $BQ_DATASET'" &&
+    export SUBST_TAGS=`echo "%TRAVIS_TAG, %TRAVIS_COMMIT, %PROJECT_ID, %BQ_PROJECT, %BQ_DATASET" | sed "s/%/$/g"` &&
     $TRAVIS_BUILD_DIR/travis/deploy_app.sh mlab-nstesting SERVICE_ACCOUNT_mlab_nstesting $TRAVIS_BUILD_DIR/appengine/rate_table
   skip_cleanup: true
   on:
