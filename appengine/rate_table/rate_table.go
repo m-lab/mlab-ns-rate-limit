@@ -11,8 +11,11 @@ import (
 	"os"
 
 	"cloud.google.com/go/datastore"
+	"github.com/GoogleCloudPlatform/google-cloud-go/bigquery"
 	"github.com/m-lab/go/bqext"
 	"github.com/m-lab/mlab-ns-rate-limit/endpoint"
+	"github.com/m-lab/mlab-ns-rate-limit/metrics"
+	"google.golang.org/api/option"
 	"google.golang.org/appengine"
 	"google.golang.org/appengine/memcache"
 )
@@ -61,6 +64,24 @@ func Status(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "</body></html>\n")
 }
 
+// NewDataset creates a Dataset for a project.
+// httpClient is used to inject mocks for the bigquery client.
+// if httpClient is nil, a suitable default client is used.
+// Additional bigquery ClientOptions may be optionally passed as final
+//   clientOpts argument.  This is useful for testing credentials.
+// TODO - update go/bqext version to accept a context.
+func NewDataset(ctx context.Context, project, dataset string, clientOpts ...option.ClientOption) (Dataset, error) {
+	var bqClient *bigquery.Client
+	var err error
+	bqClient, err = bigquery.NewClient(ctx, project, clientOpts...)
+
+	if err != nil {
+		return Dataset{}, err
+	}
+
+	return bqext.Dataset{bqClient.Dataset(dataset), bqClient}, nil
+}
+
 // Update pulls new data from BigQuery, and pushes updated key/value pairs
 // and bloom filter to memcache and datastore.
 func Update(w http.ResponseWriter, r *http.Request) {
@@ -69,22 +90,28 @@ func Update(w http.ResponseWriter, r *http.Request) {
 	threshold := 12                             // requests per day
 	projectID, ok := os.LookupEnv("PROJECT_ID") // Datastore output project
 	if ok != true {
+		metrics.FailCount.WithLabelValues("environ").Inc()
 		http.Error(w, `{"message": "PROJECT_ID not defined"}`, http.StatusInternalServerError)
 		return
 	}
 	bqProject, ok := os.LookupEnv("BQ_PROJECT")
 	if ok != true {
+		metrics.FailCount.WithLabelValues("environ").Inc()
 		http.Error(w, `{"message": "BQ_PROJECT not defined"}`, http.StatusInternalServerError)
 		return
 	}
 	dataset, ok := os.LookupEnv("BQ_DATASET")
 	if ok != true {
+		metrics.FailCount.WithLabelValues("environ").Inc()
 		http.Error(w, `{"message": "BQ_DATASET not defined"}`, http.StatusInternalServerError)
 		return
 	}
-	dsExt, err := bqext.NewDataset(bqProject, dataset)
+
+	ctx := appengine.NewContext(r)
+	dsExt, err := NewDataset(ctx, bqProject, dataset)
 	if err != nil {
 		log.Println(err)
+		metrics.FailCount.WithLabelValues("dataset").Inc()
 		http.Error(w, `{"message": "`+err.Error()+`"}`, http.StatusInternalServerError)
 		return
 	}
@@ -92,6 +119,7 @@ func Update(w http.ResponseWriter, r *http.Request) {
 	rows, err := endpoint.FetchEndpointStats(&dsExt, threshold)
 	if err != nil {
 		log.Println(err)
+		metrics.FailCount.WithLabelValues("fetch").Inc()
 		http.Error(w, `{"message": "`+err.Error()+`"}`, http.StatusInternalServerError)
 		return
 	}
@@ -99,20 +127,25 @@ func Update(w http.ResponseWriter, r *http.Request) {
 	keys, endpoints, err := endpoint.MakeKeysAndStats(rows)
 	if err != nil {
 		log.Println(err)
+		metrics.FailCount.WithLabelValues("make").Inc()
 		http.Error(w, `{"message": "`+err.Error()+`"}`, http.StatusInternalServerError)
 		return
 	}
 
 	// Save all the keys
-	ctx := appengine.NewContext(r)
 	client, err := datastore.NewClient(ctx, projectID)
 	if err != nil {
 		log.Println(err)
+		metrics.FailCount.WithLabelValues("client").Inc()
 		http.Error(w, `{"message": "`+err.Error()+`"}`, http.StatusInternalServerError)
 		return
 	}
+
+	metrics.BadEndpointCount.Set(float64(len(keys)))
+
 	_, err = client.PutMulti(ctx, keys, endpoints)
 	if err != nil {
+		metrics.FailCount.WithLabelValues("put-multi").Inc()
 		log.Println(err)
 		http.Error(w, `{"message": "`+err.Error()+`"}`, http.StatusInternalServerError)
 		return
