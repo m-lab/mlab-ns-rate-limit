@@ -12,7 +12,7 @@ cache:
     - "$HOME/google-cloud-sdk/"
 
 before_install:
-- export SUBST_TAGS='$$TRAVIS_TAG, $$TRAVIS_COMMIT, $$PROJECT_ID, $$BQ_PROJECT, $$BQ_DATASET' &&
+- export SUBST_TAGS='\$TRAVIS_TAG, \$TRAVIS_COMMIT, \$PROJECT_ID, \$BQ_PROJECT, \$BQ_DATASET' &&
   echo $SUBST_TAGS
 # Coverage tools
 - go get github.com/mattn/goveralls
