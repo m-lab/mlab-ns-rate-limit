@@ -70,39 +70,52 @@ func Update(w http.ResponseWriter, r *http.Request) {
 	projectID, ok := os.LookupEnv("PROJECT_ID") // Datastore output project
 	if ok != true {
 		http.Error(w, `{"message": "PROJECT_ID not defined"}`, http.StatusInternalServerError)
+		return
 	}
 	bqProject, ok := os.LookupEnv("BQ_PROJECT")
 	if ok != true {
 		http.Error(w, `{"message": "BQ_PROJECT not defined"}`, http.StatusInternalServerError)
+		return
 	}
 	dataset, ok := os.LookupEnv("BQ_DATASET")
 	if ok != true {
 		http.Error(w, `{"message": "BQ_DATASET not defined"}`, http.StatusInternalServerError)
+		return
 	}
 	dsExt, err := bqext.NewDataset(bqProject, dataset)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Println(err)
+		http.Error(w, `{"message": "`+err.Error()+`"}`, http.StatusInternalServerError)
+		return
 	}
 	// Fetch all client signatures that exceed threshold
 	rows, err := endpoint.FetchEndpointStats(&dsExt, threshold)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Println(err)
+		http.Error(w, `{"message": "`+err.Error()+`"}`, http.StatusInternalServerError)
+		return
 	}
 
 	keys, endpoints, err := endpoint.MakeKeysAndStats(rows)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Println(err)
+		http.Error(w, `{"message": "`+err.Error()+`"}`, http.StatusInternalServerError)
+		return
 	}
 
 	// Save all the keys
 	ctx := context.Background()
 	client, err := datastore.NewClient(ctx, projectID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Println(err)
+		http.Error(w, `{"message": "`+err.Error()+`"}`, http.StatusInternalServerError)
+		return
 	}
 	_, err = client.PutMulti(ctx, keys, endpoints)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Println(err)
+		http.Error(w, `{"message": "`+err.Error()+`"}`, http.StatusInternalServerError)
+		return
 	}
 
 	// TODO - clean up obsolete endpoints
