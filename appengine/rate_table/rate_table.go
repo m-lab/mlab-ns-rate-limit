@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"os"
 
-	"foobar.cloud.google.com/datastore"
+	"cloud.google.com/go/datastore"
 	"github.com/m-lab/go/bqext"
 	"github.com/m-lab/mlab-ns-rate-limit/endpoint"
 	"google.golang.org/appengine"
@@ -66,12 +66,12 @@ func Status(w http.ResponseWriter, r *http.Request) {
 func Update(w http.ResponseWriter, r *http.Request) {
 	// TODO - load threshold from flags or env-vars (see Peter's code?)
 	// TODO - move to init() ?
-	threshold = 12 // requests per day
-	projectID, ok := os.Getenv("PROJECT_ID")
+	threshold := 12 // requests per day
+	projectID, ok := os.LookupEnv("PROJECT_ID")
 	if ok != true {
 		http.Error(w, `{"message": "PROJECT_ID not defined"}`, http.StatusInternalServerError)
 	}
-	dataset, ok := os.Getenv("DATASET")
+	dataset, ok := os.LookupEnv("DATASET")
 	if ok != true {
 		http.Error(w, `{"message": "DATASET not defined"}`, http.StatusInternalServerError)
 	}
@@ -85,7 +85,7 @@ func Update(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 
-	keys, stats, err := endpoint.MakeKeysAndStats(rows)
+	keys, endpoints, err := endpoint.MakeKeysAndStats(rows)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
