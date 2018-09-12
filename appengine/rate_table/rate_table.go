@@ -1,5 +1,7 @@
 // Package rate_table contains the top level app-engine code to create datastore and memcache
 // entries to control mlab-ns rate limiting.
+// TODO - add more metrics?
+// TODO - update travis submodule after deploy_app changes are committed.
 package rate_table
 
 import (
@@ -10,7 +12,12 @@ import (
 	"net/http"
 	"os"
 
+	"cloud.google.com/go/bigquery"
+	"cloud.google.com/go/datastore"
+	"github.com/m-lab/go/bqext"
 	"github.com/m-lab/mlab-ns-rate-limit/endpoint"
+	"github.com/m-lab/mlab-ns-rate-limit/metrics"
+	"google.golang.org/api/option"
 	"google.golang.org/appengine"
 	"google.golang.org/appengine/memcache"
 )
@@ -35,6 +42,7 @@ func init() {
 	http.HandleFunc("/", defaultHandler)
 	http.HandleFunc("/benchmark", benchmark)
 	http.HandleFunc("/status", Status)
+	http.HandleFunc("/update", Update)
 }
 
 // Status writes an instance summary into the response.
@@ -56,6 +64,99 @@ func Status(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "%s</br>\n", env[i])
 	}
 	fmt.Fprintf(w, "</body></html>\n")
+}
+
+// NewDataset creates a Dataset for a project.
+// httpClient is used to inject mocks for the bigquery client.
+// If httpClient is nil, a suitable default client is used.
+// Additional bigquery ClientOptions may be optionally passed as final
+// clientOpts argument.  This is useful for testing credentials.
+// TODO - update go/bqext version to accept a context.
+func NewDataset(ctx context.Context, project, dataset string, clientOpts ...option.ClientOption) (bqext.Dataset, error) {
+	var bqClient *bigquery.Client
+	var err error
+	bqClient, err = bigquery.NewClient(ctx, project, clientOpts...)
+
+	if err != nil {
+		return bqext.Dataset{}, err
+	}
+
+	return bqext.Dataset{bqClient.Dataset(dataset), bqClient}, nil
+}
+
+// Update pulls new data from BigQuery, and pushes updated key/value pairs
+// to datastore.
+// TODO - also update bloom filter and memcache.
+func Update(w http.ResponseWriter, r *http.Request) {
+	// TODO - load threshold from flags or env-vars (see Peter's code?)
+	// TODO - move to init() ?
+	threshold := 12                             // requests per day
+	projectID, ok := os.LookupEnv("PROJECT_ID") // Datastore output project
+	if ok != true {
+		metrics.FailCount.WithLabelValues("environ").Inc()
+		http.Error(w, `{"message": "PROJECT_ID not defined"}`, http.StatusInternalServerError)
+		return
+	}
+	bqProject, ok := os.LookupEnv("BQ_PROJECT")
+	if ok != true {
+		metrics.FailCount.WithLabelValues("environ").Inc()
+		http.Error(w, `{"message": "BQ_PROJECT not defined"}`, http.StatusInternalServerError)
+		return
+	}
+	dataset, ok := os.LookupEnv("BQ_DATASET")
+	if ok != true {
+		metrics.FailCount.WithLabelValues("environ").Inc()
+		http.Error(w, `{"message": "BQ_DATASET not defined"}`, http.StatusInternalServerError)
+		return
+	}
+
+	ctx := appengine.NewContext(r)
+	dsExt, err := NewDataset(ctx, bqProject, dataset)
+	if err != nil {
+		log.Println(err)
+		metrics.FailCount.WithLabelValues("dataset").Inc()
+		http.Error(w, `{"message": "`+err.Error()+`"}`, http.StatusInternalServerError)
+		return
+	}
+	// Fetch all client signatures that exceed threshold
+	rows, err := endpoint.FetchEndpointStats(&dsExt, threshold)
+	if err != nil {
+		log.Println(err)
+		metrics.FailCount.WithLabelValues("fetch").Inc()
+		http.Error(w, `{"message": "`+err.Error()+`"}`, http.StatusInternalServerError)
+		return
+	}
+
+	keys, endpoints, err := endpoint.MakeKeysAndStats(rows)
+	if err != nil {
+		log.Println(err)
+		metrics.FailCount.WithLabelValues("make").Inc()
+		http.Error(w, `{"message": "`+err.Error()+`"}`, http.StatusInternalServerError)
+		return
+	}
+
+	// Save all the keys
+	client, err := datastore.NewClient(ctx, projectID)
+	if err != nil {
+		log.Println(err)
+		metrics.FailCount.WithLabelValues("client").Inc()
+		http.Error(w, `{"message": "`+err.Error()+`"}`, http.StatusInternalServerError)
+		return
+	}
+
+	metrics.BadEndpointCount.Set(float64(len(keys)))
+
+	_, err = client.PutMulti(ctx, keys, endpoints)
+	if err != nil {
+		metrics.FailCount.WithLabelValues("put-multi").Inc()
+		log.Println(err)
+		http.Error(w, `{"message": "`+err.Error()+`"}`, http.StatusInternalServerError)
+		return
+	}
+
+	// TODO - clean up obsolete endpoints
+	// TODO - handle bloom filter
+	// TODO - update memcache
 }
 
 const defaultMessage = "<html><body>This is not the app you're looking for.</body></html>"

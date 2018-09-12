@@ -55,10 +55,18 @@ script:
 #- $HOME/gopath/bin/gocovmerge bq.cov > merge.cov
 #- $HOME/gopath/bin/goveralls -coverprofile=merge.cov -service=travis-ci
 
+before_deploy:
+# Terrible hack to get around travis substitution.
+- export SUBST_TAGS=`echo "%TRAVIS_TAG, %TRAVIS_COMMIT, %PROJECT_ID, %BQ_PROJECT, %BQ_DATASET" | sed "s/%/$/g"`
+- echo $SUBST_TAGS
+
 deploy:
 # Testing: deploy to ns-sandbox for testing purpose.
 - provider: script
   script:
+    export PROJECT_ID="mlab-nstesting" &&
+    export BQ_PROJECT="mlab-ns" &&
+    export BQ_DATASET="exports" &&
     $TRAVIS_BUILD_DIR/travis/deploy_app.sh mlab-nstesting SERVICE_ACCOUNT_mlab_nstesting $TRAVIS_BUILD_DIR/appengine/rate_table
   skip_cleanup: true
   on:

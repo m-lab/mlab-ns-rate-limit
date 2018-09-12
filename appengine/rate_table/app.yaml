@@ -10,3 +10,6 @@ env_variables:
   # These should be substituted in the travis deployment script.
   RELEASE_TAG: ${TRAVIS_TAG}
   COMMIT_HASH: ${TRAVIS_COMMIT}
+  PROJECT_ID: ${PROJECT_ID}
+  BQ_PROJECT: ${BQ_PROJECT}
+  BQ_DATASET: ${BQ_DATASET}
