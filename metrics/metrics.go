@@ -10,7 +10,7 @@ func init() {
 }
 
 var (
-	// FailCount counts the number of requests that result in a fatal failure.
+	// FailCount counts the number of failed requests.
 	// These occur when a request cannot be completed.
 	//
 	// Provides metrics:
@@ -30,7 +30,7 @@ var (
 	// Provides metrics:
 	//   rate_table_warning_count{type}
 	// Example usage:
-	// metrics.WarningCount.WithLabelValues("funny xyz").Inc()
+	// metrics.WarningCount.WithLabelValues("No bad clients found").Inc()
 	WarningCount = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "rate_table_warning_total",
@@ -39,12 +39,12 @@ var (
 		[]string{"type"},
 	)
 
-	// BadEndpointCount counts all warnings encountered during processing a request.
+	// BadEndpointCount tracks number of bad endpoints in most recent update.
 	//
 	// Provides metrics:
-	//   rate_table_warning_count{type}
+	//   rate_table_bad_endpoints_count{}
 	// Example usage:
-	// metrics.WarningCount.WithLabelValues("funny xyz").Inc()
+	// metrics.WarningCount.Inc()
 	BadEndpointCount = prometheus.NewGauge(
 		prometheus.GaugeOpts{
 			Name: "rate_table_bad_endpoints_count",

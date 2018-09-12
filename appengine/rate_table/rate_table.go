@@ -68,7 +68,7 @@ func Status(w http.ResponseWriter, r *http.Request) {
 
 // NewDataset creates a Dataset for a project.
 // httpClient is used to inject mocks for the bigquery client.
-// if httpClient is nil, a suitable default client is used.
+// If httpClient is nil, a suitable default client is used.
 // Additional bigquery ClientOptions may be optionally passed as final
 // clientOpts argument.  This is useful for testing credentials.
 // TODO - update go/bqext version to accept a context.
@@ -85,7 +85,8 @@ func NewDataset(ctx context.Context, project, dataset string, clientOpts ...opti
 }
 
 // Update pulls new data from BigQuery, and pushes updated key/value pairs
-// and bloom filter to memcache and datastore.
+// to datastore.
+// TODO - also update bloom filter and memcache.
 func Update(w http.ResponseWriter, r *http.Request) {
 	// TODO - load threshold from flags or env-vars (see Peter's code?)
 	// TODO - move to init() ?
