@@ -1,5 +1,7 @@
 // Package rate_table contains the top level app-engine code to create datastore and memcache
 // entries to control mlab-ns rate limiting.
+// TODO - add more metrics?
+// TODO - update travis submodule after deploy_app changes are committed.
 package rate_table
 
 import (
@@ -68,7 +70,7 @@ func Status(w http.ResponseWriter, r *http.Request) {
 // httpClient is used to inject mocks for the bigquery client.
 // if httpClient is nil, a suitable default client is used.
 // Additional bigquery ClientOptions may be optionally passed as final
-//   clientOpts argument.  This is useful for testing credentials.
+// clientOpts argument.  This is useful for testing credentials.
 // TODO - update go/bqext version to accept a context.
 func NewDataset(ctx context.Context, project, dataset string, clientOpts ...option.ClientOption) (bqext.Dataset, error) {
 	var bqClient *bigquery.Client
