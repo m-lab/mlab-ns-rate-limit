@@ -42,12 +42,12 @@ var (
 	// BadEndpointCount tracks number of bad endpoints in most recent update.
 	//
 	// Provides metrics:
-	//   rate_table_bad_endpoints_count{}
+	//   rate_table_bad_endpoint_count{}
 	// Example usage:
-	// metrics.WarningCount.Inc()
+	// metrics.BadEndpointCount.Inc()
 	BadEndpointCount = prometheus.NewGauge(
 		prometheus.GaugeOpts{
-			Name: "rate_table_bad_endpoints_count",
+			Name: "rate_table_bad_endpoint_count",
 			Help: "Current number of bad endpoints.",
 		},
 	)
