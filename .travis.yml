@@ -51,9 +51,24 @@ script:
 # Run query "unit tests".
 - go test -v ./... -bench=.
 
-# Coveralls
-#- $HOME/gopath/bin/gocovmerge bq.cov > merge.cov
-#- $HOME/gopath/bin/goveralls -coverprofile=merge.cov -service=travis-ci
+# Run all tests with coverage.
+- MODULES="endpoint"
+- for module in $MODULES; do
+    COVER_PKGS=${COVER_PKGS}./$module/..., ;
+  done
+- COVER_PKGS=${COVER_PKGS::-1}  # Trim the trailing comma
+- EC=0
+# Note that for modules in subdirectories, this replaces separating slashes with _.
+- for module in $MODULES; do
+    go test -v -coverpkg=$COVER_PKGS -coverprofile=${module//\//_}.cov github.com/m-lab/mlab-ns-rate-limit/$module ;
+    EC=$[ $EC || $? ] ;
+  done
+- echo "summary status $EC" ;
+- if [[ $EC != 0 ]]; then false; fi
+
+# Coveralls#
+- $HOME/gopath/bin/gocovmerge *.cov > merge.cov
+- $HOME/gopath/bin/goveralls -coverprofile=merge.cov -service=travis-ci
 
 before_deploy:
 # Terrible hack to get around travis substitution.
