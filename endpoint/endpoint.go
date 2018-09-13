@@ -150,19 +150,35 @@ func DeleteAllKeys(ctx context.Context, client *datastore.Client, namespace stri
 // PutMulti writes a set of keys and endpoints to datastore, dividing into blocks of 500
 // to satisfy datastore API constraint.
 func PutMulti(ctx context.Context, client *datastore.Client, keys []*datastore.Key, endpoints []Stats) error {
+	count := 0
+	errChan := make(chan error)
 	for start := 0; start < len(keys); start = start + 500 {
+		count++
 		end := start + 500
 		if end > len(keys) {
 			end = len(keys)
 		}
 
-		_, err := client.PutMulti(ctx, keys[start:end], endpoints[start:end])
+		// TODO - add latency metric here.
+		go func(errChan chan error, start, end int) {
+			log.Println(start, end)
+			_, err := client.PutMulti(ctx, keys[start:end], endpoints[start:end])
+			log.Println("Wrote", end-start)
+			errChan <- err
+		}(errChan, start, end)
+	}
+
+	var lastError error = nil
+	for ; count > 0; count-- {
+		err := <-errChan
 		if err != nil {
-			return err
+			lastError = err
+			log.Println(err)
 		}
 	}
+
 	log.Println("Put", len(keys), "entities")
-	return nil
+	return lastError
 }
 
 // simpleQuery queries the stackdriver request log table, and extracts the count
