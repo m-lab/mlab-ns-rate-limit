@@ -86,7 +86,7 @@ func NewDataset(ctx context.Context, project, dataset string, clientOpts ...opti
 // TODO - also update bloom filter and memcache.
 func Update(w http.ResponseWriter, r *http.Request) {
 	// TODO - load threshold from flags or env-vars (see Peter's code?)
-	// TODO - move to init() ?
+	// TODO - move env var loading to init() ?
 	threshold := 12                             // requests per day
 	projectID, ok := os.LookupEnv("PROJECT_ID") // Datastore output project
 	if ok != true {
@@ -133,8 +133,8 @@ func Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Println(len(keys))
-	if len(keys) > 9999 {
-		metrics.WarningCount.WithLabelValues("more than 10K bad clients").Inc()
+	if len(keys) > 19999 {
+		metrics.WarningCount.WithLabelValues("more than 20K bad clients").Inc()
 	} else if len(keys) == 0 {
 		metrics.WarningCount.WithLabelValues("no bad clients").Inc()
 	}

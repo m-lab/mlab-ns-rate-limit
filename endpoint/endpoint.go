@@ -1,7 +1,10 @@
 // Package endpoint contains stats for client endpoints.  An endpoint corresponds
-// to an mlab-ns request signature that we expect may represent an individual
-// requester.  (IP alone is insufficient, because of CG-NAT and use
-// of proxies).  We use the userAgent, resource string, and IP address.
+// to an mlab-ns request signature that we expect may represent an individual requester.
+// (IP alone is insufficient, because of CG-NAT and use of proxies).  We use the userAgent,
+// resource string, and IP address.
+// NOTE: We currently limit results to 20K endpoints, and as of Sept 2018, we are seeing about
+// 8K endpoints with more than 12 requests per day.  The limit is imposed because we don't have
+// enough experience to predict how mlab-ns might behave if bad endpoints grew to 100K or 200K.
 package endpoint
 
 import (
@@ -222,4 +225,4 @@ GROUP BY
   RequesterIP, userAgent, resource, RequestsPerDay
 ORDER BY
   RequestsPerDay DESC
-LIMIT 10000`
+LIMIT 20000`
