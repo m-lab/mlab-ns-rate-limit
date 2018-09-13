@@ -134,32 +134,58 @@ func GetAllKeys(ctx context.Context, client *datastore.Client, namespace string,
 	return client.GetAll(ctx, query, nil)
 }
 
+// FindObsoleteEndpointKeys takes a list of new keys, and returns the list of obsolete keys,
+// i.e., the keys currently in datastore that are not in the list.
+// TODO - add unit test.
+func FindObsoleteEndpointKeys(ctx context.Context, client *datastore.Client, newKeys []*datastore.Key) ([]*datastore.Key, error) {
+	oldKeys, err := GetAllKeys(ctx, client, endpointNamespace, endpointKind)
+	if err != nil {
+		return nil, err
+	}
+
+	// Figure out which of the old keys are obsolete.
+	delKeys := oldKeys
+	if len(newKeys) != 0 {
+		newKeySet := make(map[datastore.Key]bool, len(newKeys))
+		for i := range newKeys {
+			newKeySet[*newKeys[i]] = true
+		}
+
+		delKeys = make([]*datastore.Key, len(oldKeys))
+
+		// remove new keys from set to delete
+		for i := range oldKeys {
+			k := oldKeys[i] // pointer to key
+			if !newKeySet[*k] {
+				delKeys = append(delKeys, k)
+			}
+		}
+	}
+
+	return delKeys, nil
+}
+
 // DeleteAllKeys deletes all keys for a namespace and kind from Datastore, dividing into blocks of 500
 // to satisfy datastore API constraint.  If there are errors, it returns the last error message, but the
 // length returned will not reflect the failures.
-func DeleteAllKeys(ctx context.Context, client *datastore.Client, namespace string, kind string) (int, error) {
-	qkeys, err := GetAllKeys(ctx, client, namespace, kind)
-	if err != nil {
-		return 0, err
-	}
-
+func DeleteKeys(ctx context.Context, client *datastore.Client, keys []*datastore.Key) error {
 	count := 0
 	errChan := make(chan error)
-	for start := 0; start < len(qkeys); start = start + 500 {
+	for start := 0; start < len(keys); start = start + 500 {
 		count++
 		end := start + 500
-		if end > len(qkeys) {
-			end = len(qkeys)
+		if end > len(keys) {
+			end = len(keys)
 		}
 
 		// TODO - add latency metric here.
 		go func(errChan chan error, start, end int) {
-			err := client.DeleteMulti(ctx, qkeys[start:end])
+			err := client.DeleteMulti(ctx, keys[start:end])
 			errChan <- err
 		}(errChan, start, end)
 	}
 
-	var lastError error = nil
+	var lastError error
 	for ; count > 0; count-- {
 		err := <-errChan
 		if err != nil {
@@ -168,7 +194,7 @@ func DeleteAllKeys(ctx context.Context, client *datastore.Client, namespace stri
 		}
 	}
 
-	return len(qkeys), lastError
+	return lastError
 }
 
 // PutMulti writes a set of keys and endpoints to datastore, dividing into blocks of 500
@@ -190,7 +216,7 @@ func PutMulti(ctx context.Context, client *datastore.Client, keys []*datastore.K
 		}(errChan, start, end)
 	}
 
-	var lastError error = nil
+	var lastError error
 	for ; count > 0; count-- {
 		err := <-errChan
 		if err != nil {

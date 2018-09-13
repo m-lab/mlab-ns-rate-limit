@@ -1,7 +1,6 @@
 // Package rate_table contains the top level app-engine code to create datastore and memcache
 // entries to control mlab-ns rate limiting.
 // TODO - add more metrics?
-// TODO - update travis submodule after deploy_app changes are committed.
 package rate_table
 
 import (
@@ -132,7 +131,6 @@ func Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Println(len(keys))
 	if len(keys) > 19999 {
 		metrics.WarningCount.WithLabelValues("more than 20K bad clients").Inc()
 	} else if len(keys) == 0 {
@@ -149,17 +147,27 @@ func Update(w http.ResponseWriter, r *http.Request) {
 
 	metrics.BadEndpointCount.Set(float64(len(keys)))
 
+	// Find obsolete keys, so we can delete them later.
+	obsoleteKeys, err := endpoint.FindObsoleteEndpointKeys(ctx, client, keys)
+	if err != nil {
+		log.Println(err)
+		metrics.WarningCount.WithLabelValues("FindObsoleteEndpointKeys failed").Inc()
+	}
+
+	// Save all the keys
 	err = endpoint.PutMulti(ctx, client, keys, endpoints)
 	if err != nil {
 		metrics.FailCount.WithLabelValues("put-multi").Inc()
 		log.Println(err)
 		http.Error(w, `{"message": "`+err.Error()+`"}`, http.StatusInternalServerError)
-		return
 	}
 
-	// TODO - clean up obsolete endpoints
-	// TODO - handle bloom filter
-	// TODO - update memcache
+	// Delete all the obsolete keys
+	err = endpoint.DeleteKeys(ctx, client, obsoleteKeys)
+	if err != nil {
+		log.Println(err)
+		metrics.WarningCount.WithLabelValues("failed to delete obsolete keys").Inc()
+	}
 }
 
 const defaultMessage = "<html><body>This is not the app you're looking for.</body></html>"

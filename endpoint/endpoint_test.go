@@ -29,7 +29,7 @@ func getClient() (*datastore.Client, error) {
 	return datastore.NewClient(ctx, projectID)
 }
 
-func TestDeleteAllKeys(t *testing.T) {
+func TestDeleteKeys(t *testing.T) {
 	// This should only be run when using the emulator.
 	_, usingEmulator := os.LookupEnv("DATASTORE_EMULATOR_HOST")
 	if !usingEmulator {
@@ -45,7 +45,11 @@ func TestDeleteAllKeys(t *testing.T) {
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	_, err = endpoint.DeleteAllKeys(ctx, client, "endpoint_stats", "Requests")
+	keys, err := endpoint.GetAllKeys(ctx, client, "endpoint_stats", "Requests")
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = endpoint.DeleteKeys(ctx, client, keys)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,13 +124,17 @@ func TestCreateTestEntries(t *testing.T) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
+	delKeys, err := endpoint.GetAllKeys(ctx, client, "endpoint_stats", "Requests")
+	if err != nil {
+		log.Fatal(err)
+	}
 	// This is OK, because we are using client ProjectID mlab-testing.
-	_, err = endpoint.DeleteAllKeys(ctx, client, "endpoint_stats", "Requests")
+	err = endpoint.DeleteKeys(ctx, client, delKeys)
 	if err != nil {
 		log.Fatal(len(keys), err)
 	}
 
-	// Save all the keys
+	// Save all the new keys
 	err = endpoint.PutMulti(ctx, client, keys, endpoints)
 	if err != nil {
 		log.Fatalf("Failed: %v", err)
