@@ -119,7 +119,7 @@ func Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Fetch all client signatures that exceed threshold
-	rows, err := endpoint.FetchEndpointStats(&dsExt, threshold)
+	rows, err := endpoint.FetchEndpointStats(ctx, &dsExt, threshold)
 	if err != nil {
 		log.Println(err)
 		metrics.FailCount.WithLabelValues("fetch").Inc()

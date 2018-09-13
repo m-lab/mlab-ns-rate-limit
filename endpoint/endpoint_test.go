@@ -73,7 +73,10 @@ func TestLiveBQQuery(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Fetch all client signatures with more than 200 requests in past day.
-	rows, err := endpoint.FetchEndpointStats(&dsExt, 200)
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	rows, err := endpoint.FetchEndpointStats(ctx, &dsExt, 200)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +126,7 @@ func TestCreateTestEntries(t *testing.T) {
 		log.Fatal(err)
 	}
 
-	// Saves the new entity.
+	// Save all the keys
 	_, err = client.PutMulti(ctx, keys, endpoints)
 	if err != nil {
 		log.Fatalf("Failed: %v", err)

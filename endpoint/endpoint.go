@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"cloud.google.com/go/bigquery"
 	"cloud.google.com/go/datastore"
@@ -96,12 +97,14 @@ func MakeKeysAndStats(rows []map[string]bigquery.Value) ([]*datastore.Key, []Sta
 // FetchEndpointStats executes simpleQuery, and returns a slice of rows containing
 // endpoint signatures and request counts.
 // TODO - move the body (excluding simpleQuery) into go/bqext
-func FetchEndpointStats(dsExt *bqext.Dataset, threshold int) ([]map[string]bigquery.Value, error) {
+func FetchEndpointStats(ctx context.Context, dsExt *bqext.Dataset, threshold int) ([]map[string]bigquery.Value, error) {
 	qString := strings.Replace(simpleQuery, "${THRESHOLD}", fmt.Sprint(threshold), 1)
 	qString = strings.Replace(qString, "${DATE}", fmt.Sprint(threshold), 1)
 
 	query := dsExt.ResultQuery(qString, false)
-	it, err := query.Read(context.Background())
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	it, err := query.Read(ctx)
 	if err != nil {
 		return nil, err
 	}
