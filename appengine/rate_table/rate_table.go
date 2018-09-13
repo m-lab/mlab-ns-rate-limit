@@ -1,4 +1,4 @@
-// Package rate_table contains the top level app-engine code to create datastore and memcache
+// Package rate_table contains the top level app-engine code to create datastore
 // entries to control mlab-ns rate limiting.
 // TODO - add more metrics?
 package rate_table
@@ -157,8 +157,8 @@ func Update(w http.ResponseWriter, r *http.Request) {
 	// Save all the keys
 	err = endpoint.PutMulti(ctx, client, keys, endpoints)
 	if err != nil {
-		metrics.FailCount.WithLabelValues("put-multi").Inc()
 		log.Println(err)
+		metrics.FailCount.WithLabelValues("put-multi").Inc()
 		http.Error(w, `{"message": "`+err.Error()+`"}`, http.StatusInternalServerError)
 	}
 
@@ -167,6 +167,12 @@ func Update(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Println(err)
 		metrics.WarningCount.WithLabelValues("failed to delete obsolete keys").Inc()
+	}
+
+	err = endpoint.UpdateBloomFilter(ctx, client, keys)
+	if err != nil {
+		log.Println(err)
+		metrics.WarningCount.WithLabelValues("failed to create/write bloom filter").Inc()
 	}
 }
 

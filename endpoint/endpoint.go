@@ -16,12 +16,14 @@ import (
 
 	"cloud.google.com/go/bigquery"
 	"cloud.google.com/go/datastore"
+	"github.com/EverythingMe/inbloom/go/inbloom"
 	"github.com/m-lab/go/bqext"
 	"google.golang.org/api/iterator"
 )
 
 const (
 	endpointKind      = "Requests"
+	bloomKind         = "BloomFilter"
 	endpointNamespace = "endpoint_stats"
 )
 
@@ -229,8 +231,59 @@ func PutMulti(ctx context.Context, client *datastore.Client, keys []*datastore.K
 	return lastError
 }
 
+// UpdateBloomFilter creates an appropriate bloom filter, populates it, and writes it to datastore.
+// TODO - need bloom filter compatible between python and golang!!
+func UpdateBloomFilter(ctx context.Context, client *datastore.Client, keys []*datastore.Key) error {
+	filter, err := inbloom.NewFilter(len(keys), 0.001)
+	if err != nil {
+		return err
+	}
+	for k := range keys {
+		filter.Add(keys[k].Name)
+	}
+
+	// Save the filter
+	dsKey := datastore.NameKey(bloomKind, "bloom_filter", nil)
+	dsKey.Namespace = endpointNamespace
+
+	_, err = client.Put(ctx, dsKey, filter.Marshal())
+	return err
+}
+
+// FindObsoleteEndpointKeys takes a list of new keys, and returns the list of obsolete keys,
+// i.e., the keys currently in datastore that are not in the list.
+// TODO - add unit test.
+func FindObsoleteEndpointKeys(ctx context.Context, client *datastore.Client, newKeys []*datastore.Key) ([]*datastore.Key, error) {
+	oldKeys, err := GetAllKeys(ctx, client, endpointNamespace, endpointKind)
+	if err != nil {
+		return nil, err
+	}
+
+	// Figure out which of the old keys are obsolete.
+	delKeys := oldKeys
+	if len(newKeys) != 0 {
+		newKeySet := make(map[datastore.Key]bool, len(newKeys))
+		for i := range newKeys {
+			newKeySet[*newKeys[i]] = true
+		}
+
+		delKeys = make([]*datastore.Key, len(oldKeys))
+
+		// remove new keys from set to delete
+		for i := range oldKeys {
+			k := oldKeys[i] // pointer to key
+			if !newKeySet[*k] {
+				delKeys = append(delKeys, k)
+			}
+		}
+	}
+
+	return delKeys, nil
+}
+
 // simpleQuery queries the stackdriver request log table, and extracts the count
 // of requests from each requester signature (RequesterIP, userAgent, request (resource) string)
+// that has more then $THRESHOLD requests per day.  It returns up to 10K of the worst endpoints.
 var simpleQuery = `
 SELECT
   RequesterIP, resource, userAgent, RequestsPerDay
