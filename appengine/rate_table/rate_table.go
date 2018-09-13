@@ -132,6 +132,7 @@ func Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Println(len(keys))
 	if len(keys) > 9999 {
 		metrics.WarningCount.WithLabelValues("more than 10K bad clients").Inc()
 	} else if len(keys) == 0 {
