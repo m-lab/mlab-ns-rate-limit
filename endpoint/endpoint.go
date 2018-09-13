@@ -132,19 +132,44 @@ func GetAllKeys(ctx context.Context, client *datastore.Client, namespace string,
 }
 
 // DeleteAllKeys deletes all keys for a namespace and kind from Datastore.
+// TODO - looks like this also is restricted to 500 keys per call.  See PutMulti
 func DeleteAllKeys(ctx context.Context, client *datastore.Client, namespace string, kind string) (int, error) {
 	qkeys, err := GetAllKeys(ctx, client, namespace, kind)
 	if err != nil {
 		return 0, err
 	}
 
-	err = client.DeleteMulti(ctx, qkeys)
-	if err != nil {
-		return 0, err
-	}
-	log.Println("Deleted", len(qkeys), "keys from datastore.")
+	count := 0
+	errChan := make(chan error)
+	for start := 0; start < len(qkeys); start = start + 500 {
+		count++
+		end := start + 500
+		if end > len(qkeys) {
+			end = len(qkeys)
+		}
 
-	return len(qkeys), nil
+		// TODO - add latency metric here.
+		go func(errChan chan error, start, end int) {
+			// TODO remove this
+			log.Println(start, end)
+			err := client.DeleteMulti(ctx, qkeys[start:end])
+			// TODO remove this
+			log.Println("Deleted", end-start)
+			errChan <- err
+		}(errChan, start, end)
+	}
+
+	var lastError error = nil
+	for ; count > 0; count-- {
+		err := <-errChan
+		if err != nil {
+			lastError = err
+			log.Println(err)
+		}
+	}
+
+	log.Println("Deleted", len(qkeys), "keys from datastore.")
+	return len(qkeys), lastError
 }
 
 // PutMulti writes a set of keys and endpoints to datastore, dividing into blocks of 500
@@ -161,8 +186,8 @@ func PutMulti(ctx context.Context, client *datastore.Client, keys []*datastore.K
 
 		// TODO - add latency metric here.
 		go func(errChan chan error, start, end int) {
-			log.Println(start, end)
 			_, err := client.PutMulti(ctx, keys[start:end], endpoints[start:end])
+			// TODO remove this
 			log.Println("Wrote", end-start)
 			errChan <- err
 		}(errChan, start, end)

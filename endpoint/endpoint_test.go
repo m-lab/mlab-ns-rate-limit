@@ -43,7 +43,7 @@ func TestDeleteAllKeys(t *testing.T) {
 
 	// Just verify that the call completes successfully.
 	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	_, err = endpoint.DeleteAllKeys(ctx, client, "endpoint_stats", "Requests")
 	if err != nil {
@@ -123,11 +123,11 @@ func TestCreateTestEntries(t *testing.T) {
 	// This is OK, because we are using client ProjectID mlab-testing.
 	_, err = endpoint.DeleteAllKeys(ctx, client, "endpoint_stats", "Requests")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(len(keys), err)
 	}
 
 	// Save all the keys
-	_, err = client.PutMulti(ctx, keys, endpoints)
+	err = endpoint.PutMulti(ctx, client, keys, endpoints)
 	if err != nil {
 		log.Fatalf("Failed: %v", err)
 	}
