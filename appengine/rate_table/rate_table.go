@@ -23,18 +23,15 @@ import (
 )
 
 // 1.  Datastore stuff
-// 2.  Memcache stuff
-// 3.  Bigquery stuff
+// 2.  Bigquery stuff
+// 3.  Bloom filter stuff
 // 4.  Other logic
 
 // Design elements:
 //  a. This will run in appengine standard, triggered by an appengine cron request.
 //  b. Need to determine whether cron jobs may run concurrently, which could cause headaches.
-//  c. Memcache entries will be set to expire in twice the cron interval, so that
-//     we don't have to delete endpoint signatures that are no longer abusive.
-//     We still have to delete them from datastore, though.
-//  d. We will handle the BQ query, and directly build the table in memcache and datastore as
-//     we read the query result.
+//  c. Will create a bloom filter and also store it in datastore.
+//  d. Will not handle memcache entries, as python uses pickling, and go uses binary, json or gob.
 
 func init() {
 	// Always prepend the filename and line number.
@@ -135,7 +132,12 @@ func Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Save all the keys
+	if len(keys) > 9999 {
+		metrics.WarningCount.WithLabelValues("more than 10K bad clients").Inc()
+	} else if len(keys) == 0 {
+		metrics.WarningCount.WithLabelValues("no bad clients").Inc()
+	}
+
 	client, err := datastore.NewClient(ctx, projectID)
 	if err != nil {
 		log.Println(err)
