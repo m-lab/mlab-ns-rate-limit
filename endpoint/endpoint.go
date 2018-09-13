@@ -150,7 +150,7 @@ func DeleteAllKeys(ctx context.Context, client *datastore.Client, namespace stri
 // PutMulti writes a set of keys and endpoints to datastore, dividing into blocks of 500
 // to satisfy datastore API constraint.
 func PutMulti(ctx context.Context, client *datastore.Client, keys []*datastore.Key, endpoints []Stats) error {
-	for start := 0; start < len(keys); start++ {
+	for start := 0; start < len(keys); start = start + 500 {
 		end := start + 500
 		if end > len(keys) {
 			end = len(keys)
@@ -161,6 +161,7 @@ func PutMulti(ctx context.Context, client *datastore.Client, keys []*datastore.K
 			return err
 		}
 	}
+	log.Println("Put", len(keys), "entities")
 	return nil
 }
 
@@ -185,4 +186,5 @@ WHERE
 GROUP BY
   RequesterIP, userAgent, resource, RequestsPerDay
 ORDER BY
-  RequestsPerDay DESC`
+  RequestsPerDay DESC
+LIMIT 10000`
