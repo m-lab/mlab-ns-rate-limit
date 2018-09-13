@@ -146,7 +146,7 @@ func Update(w http.ResponseWriter, r *http.Request) {
 
 	metrics.BadEndpointCount.Set(float64(len(keys)))
 
-	err := endpoint.PutMulti(ctx, client, keys, endpoints)
+	err = endpoint.PutMulti(ctx, client, keys, endpoints)
 	if err != nil {
 		metrics.FailCount.WithLabelValues("put-multi").Inc()
 		log.Println(err)
