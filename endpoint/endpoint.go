@@ -1,7 +1,10 @@
 // Package endpoint contains stats for client endpoints.  An endpoint corresponds
-// to an mlab-ns request signature that we expect may represent an individual
-// requester.  (IP alone is insufficient, because of CG-NAT and use
-// of proxies).  We use the userAgent, resource string, and IP address.
+// to an mlab-ns request signature that we expect may represent an individual requester.
+// (IP alone is insufficient, because of CG-NAT and use of proxies).  We use the userAgent,
+// resource string, and IP address.
+// NOTE: We currently limit results to 20K endpoints, and as of Sept 2018, we are seeing about
+// 8K endpoints with more than 12 requests per day.  The limit is imposed because we don't have
+// enough experience to predict how mlab-ns might behave if bad endpoints grew to 100K or 200K.
 package endpoint
 
 import (
@@ -9,6 +12,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"cloud.google.com/go/bigquery"
 	"cloud.google.com/go/datastore"
@@ -96,12 +100,14 @@ func MakeKeysAndStats(rows []map[string]bigquery.Value) ([]*datastore.Key, []Sta
 // FetchEndpointStats executes simpleQuery, and returns a slice of rows containing
 // endpoint signatures and request counts.
 // TODO - move the body (excluding simpleQuery) into go/bqext
-func FetchEndpointStats(dsExt *bqext.Dataset, threshold int) ([]map[string]bigquery.Value, error) {
+func FetchEndpointStats(ctx context.Context, dsExt *bqext.Dataset, threshold int) ([]map[string]bigquery.Value, error) {
 	qString := strings.Replace(simpleQuery, "${THRESHOLD}", fmt.Sprint(threshold), 1)
 	qString = strings.Replace(qString, "${DATE}", fmt.Sprint(threshold), 1)
 
 	query := dsExt.ResultQuery(qString, false)
-	it, err := query.Read(context.Background())
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	it, err := query.Read(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -128,20 +134,73 @@ func GetAllKeys(ctx context.Context, client *datastore.Client, namespace string,
 	return client.GetAll(ctx, query, nil)
 }
 
-// DeleteAllKeys deletes all keys for a namespace and kind from Datastore.
+// DeleteAllKeys deletes all keys for a namespace and kind from Datastore, dividing into blocks of 500
+// to satisfy datastore API constraint.  If there are errors, it returns the last error message, but the
+// length returned will not reflect the failures.
 func DeleteAllKeys(ctx context.Context, client *datastore.Client, namespace string, kind string) (int, error) {
 	qkeys, err := GetAllKeys(ctx, client, namespace, kind)
 	if err != nil {
 		return 0, err
 	}
 
-	err = client.DeleteMulti(ctx, qkeys)
-	if err != nil {
-		return 0, err
-	}
-	log.Println("Deleted", len(qkeys), "keys from datastore.")
+	count := 0
+	errChan := make(chan error)
+	for start := 0; start < len(qkeys); start = start + 500 {
+		count++
+		end := start + 500
+		if end > len(qkeys) {
+			end = len(qkeys)
+		}
 
-	return len(qkeys), nil
+		// TODO - add latency metric here.
+		go func(errChan chan error, start, end int) {
+			err := client.DeleteMulti(ctx, qkeys[start:end])
+			errChan <- err
+		}(errChan, start, end)
+	}
+
+	var lastError error = nil
+	for ; count > 0; count-- {
+		err := <-errChan
+		if err != nil {
+			lastError = err
+			log.Println(err)
+		}
+	}
+
+	return len(qkeys), lastError
+}
+
+// PutMulti writes a set of keys and endpoints to datastore, dividing into blocks of 500
+// to satisfy datastore API constraint.
+func PutMulti(ctx context.Context, client *datastore.Client, keys []*datastore.Key, endpoints []Stats) error {
+	count := 0
+	errChan := make(chan error)
+	for start := 0; start < len(keys); start = start + 500 {
+		count++
+		end := start + 500
+		if end > len(keys) {
+			end = len(keys)
+		}
+
+		// TODO - add latency metric here.
+		go func(errChan chan error, start, end int) {
+			_, err := client.PutMulti(ctx, keys[start:end], endpoints[start:end])
+			errChan <- err
+		}(errChan, start, end)
+	}
+
+	var lastError error = nil
+	for ; count > 0; count-- {
+		err := <-errChan
+		if err != nil {
+			lastError = err
+			log.Println(err)
+		}
+	}
+
+	log.Println("Put", len(keys), "entities")
+	return lastError
 }
 
 // simpleQuery queries the stackdriver request log table, and extracts the count
@@ -165,4 +224,5 @@ WHERE
 GROUP BY
   RequesterIP, userAgent, resource, RequestsPerDay
 ORDER BY
-  RequestsPerDay DESC`
+  RequestsPerDay DESC
+LIMIT 20000`

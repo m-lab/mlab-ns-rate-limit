@@ -43,7 +43,7 @@ func TestDeleteAllKeys(t *testing.T) {
 
 	// Just verify that the call completes successfully.
 	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	_, err = endpoint.DeleteAllKeys(ctx, client, "endpoint_stats", "Requests")
 	if err != nil {
@@ -73,7 +73,10 @@ func TestLiveBQQuery(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Fetch all client signatures with more than 200 requests in past day.
-	rows, err := endpoint.FetchEndpointStats(&dsExt, 200)
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	rows, err := endpoint.FetchEndpointStats(ctx, &dsExt, 200)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,11 +123,11 @@ func TestCreateTestEntries(t *testing.T) {
 	// This is OK, because we are using client ProjectID mlab-testing.
 	_, err = endpoint.DeleteAllKeys(ctx, client, "endpoint_stats", "Requests")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(len(keys), err)
 	}
 
-	// Saves the new entity.
-	_, err = client.PutMulti(ctx, keys, endpoints)
+	// Save all the keys
+	err = endpoint.PutMulti(ctx, client, keys, endpoints)
 	if err != nil {
 		log.Fatalf("Failed: %v", err)
 	}

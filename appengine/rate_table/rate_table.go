@@ -23,18 +23,15 @@ import (
 )
 
 // 1.  Datastore stuff
-// 2.  Memcache stuff
-// 3.  Bigquery stuff
+// 2.  Bigquery stuff
+// 3.  Bloom filter stuff
 // 4.  Other logic
 
 // Design elements:
 //  a. This will run in appengine standard, triggered by an appengine cron request.
 //  b. Need to determine whether cron jobs may run concurrently, which could cause headaches.
-//  c. Memcache entries will be set to expire in twice the cron interval, so that
-//     we don't have to delete endpoint signatures that are no longer abusive.
-//     We still have to delete them from datastore, though.
-//  d. We will handle the BQ query, and directly build the table in memcache and datastore as
-//     we read the query result.
+//  c. Will create a bloom filter and also store it in datastore.
+//  d. Will not handle memcache entries, as python uses pickling, and go uses binary, json or gob.
 
 func init() {
 	// Always prepend the filename and line number.
@@ -89,7 +86,7 @@ func NewDataset(ctx context.Context, project, dataset string, clientOpts ...opti
 // TODO - also update bloom filter and memcache.
 func Update(w http.ResponseWriter, r *http.Request) {
 	// TODO - load threshold from flags or env-vars (see Peter's code?)
-	// TODO - move to init() ?
+	// TODO - move env var loading to init() ?
 	threshold := 12                             // requests per day
 	projectID, ok := os.LookupEnv("PROJECT_ID") // Datastore output project
 	if ok != true {
@@ -119,7 +116,7 @@ func Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Fetch all client signatures that exceed threshold
-	rows, err := endpoint.FetchEndpointStats(&dsExt, threshold)
+	rows, err := endpoint.FetchEndpointStats(ctx, &dsExt, threshold)
 	if err != nil {
 		log.Println(err)
 		metrics.FailCount.WithLabelValues("fetch").Inc()
@@ -135,7 +132,13 @@ func Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Save all the keys
+	log.Println(len(keys))
+	if len(keys) > 19999 {
+		metrics.WarningCount.WithLabelValues("more than 20K bad clients").Inc()
+	} else if len(keys) == 0 {
+		metrics.WarningCount.WithLabelValues("no bad clients").Inc()
+	}
+
 	client, err := datastore.NewClient(ctx, projectID)
 	if err != nil {
 		log.Println(err)
@@ -146,7 +149,7 @@ func Update(w http.ResponseWriter, r *http.Request) {
 
 	metrics.BadEndpointCount.Set(float64(len(keys)))
 
-	_, err = client.PutMulti(ctx, keys, endpoints)
+	err = endpoint.PutMulti(ctx, client, keys, endpoints)
 	if err != nil {
 		metrics.FailCount.WithLabelValues("put-multi").Inc()
 		log.Println(err)
