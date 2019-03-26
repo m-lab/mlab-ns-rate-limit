@@ -292,7 +292,7 @@ WITH
     HAVING
       -- Guarantee that each client runs in each period by totaling the 'period'
       -- values. If all periods are represented, then the sum(1 + 2 + 4 + 8) = 15.
-      total != 0 AND total = 15
+      total = 15
   ),
   uniqueIPsInSixHourPeriods AS (
     (SELECT ip FROM nsRequestsInSixHourPeriods WHERE resource = "/neubot" AND ip NOT IN ( SELECT ip FROM clientsOutsideSixHourPeriods )
