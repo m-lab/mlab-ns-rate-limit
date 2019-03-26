@@ -40,7 +40,10 @@ func StatsFromMap(row map[string]bigquery.Value) (string, Stats) {
 	if ok && rpd != nil {
 		stats.RequestsPerDay = rpd.(int64)
 		if stats.RequestsPerDay > 0 {
-			stats.Probability = 6.0 / float32(stats.RequestsPerDay)
+			// TODO: make probability proportional to usage,
+			// e.g. 6.0 / float32(stats.RequestsPerDay)
+			// Probability of zero guarantees that all requests are offloaded or blocked.
+			stats.Probability = 0.0
 		}
 	}
 
@@ -101,7 +104,7 @@ func MakeKeysAndStats(rows []map[string]bigquery.Value) ([]*datastore.Key, []Sta
 // endpoint signatures and request counts.
 // TODO - move the body (excluding simpleQuery) into go/bqext
 func FetchEndpointStats(ctx context.Context, dsExt *bqext.Dataset, threshold int) ([]map[string]bigquery.Value, error) {
-	qString := strings.Replace(simpleQuery, "${THRESHOLD}", fmt.Sprint(threshold), 1)
+	qString := strings.Replace(sixHourQuery, "${THRESHOLD}", fmt.Sprint(threshold), 1)
 	qString = strings.Replace(qString, "${DATE}", fmt.Sprint(threshold), 1)
 
 	query := dsExt.ResultQuery(qString, false)
@@ -226,3 +229,64 @@ GROUP BY
 ORDER BY
   RequestsPerDay DESC
 LIMIT 20000`
+
+// sixHourQuery looks for clients that only run every six hours and issue requests
+// to both /ndt and /neubot.
+var sixHourQuery = `
+WITH nsRequests AS (
+  SELECT
+    RequesterIP, Resource, UserAgent, SUM(period) as total
+  FROM (
+    SELECT
+      protoPayload.ip as RequesterIP,
+      protoPayload.resource as Resource,
+      protopayload.userAgent as UserAgent,
+      COUNT(*) AS RequestsPerDay,
+      CASE
+        WHEN protoPayload.startTime BETWEEN TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 20 MINUTE) AND TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 82 MINUTE) THEN 1
+        WHEN protoPayload.startTime BETWEEN TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 380 MINUTE) AND TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 442 MINUTE) THEN 2
+        WHEN protoPayload.startTime BETWEEN TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 740 MINUTE) AND TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 802 MINUTE) THEN 4
+        WHEN protoPayload.startTime BETWEEN TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 1100 MINUTE) AND TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 1162 MINUTE) THEN 8
+        ELSE 0
+      END AS period
+    FROM
+  ` + "`mlab-ns.exports.appengine_googleapis_com_request_log_*`" + `
+    WHERE
+          (_table_suffix = FORMAT_DATE("%Y%m%d", CURRENT_DATE())
+      OR  _table_suffix = FORMAT_DATE("%Y%m%d", DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)))
+      AND protoPayload.starttime > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 DAY)
+      AND (protoPayload.resource = '/neubot' OR protoPayload.resource = '/ndt')
+      AND protoPayload.userAgent is NULL
+    GROUP BY
+      RequesterIP, Resource, UserAgent, period
+  )
+  GROUP BY
+    RequesterIP, Resource, UserAgent
+  HAVING
+    total != 0 AND MOD(total, 15) = 0
+),
+RequesterIPs AS (
+  (select RequesterIP from nsRequests WHERE Resource = "/neubot"
+   intersect DISTINCT
+   select RequesterIP from nsRequests WHERE Resource = "/ndt"))
+
+
+SELECT
+	protoPayload.ip AS RequesterIP,
+	protoPayload.resource as resource,
+	protoPayload.userAgent as userAgent,
+	COUNT(*) as RequestsPerDay
+FROM
+  ` + "`mlab-ns.exports.appengine_googleapis_com_request_log_*`" + `
+WHERE
+      (_table_suffix = FORMAT_DATE("%Y%m%d", CURRENT_DATE())
+      OR  _table_suffix = FORMAT_DATE("%Y%m%d", DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)))
+      AND protoPayload.starttime > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 DAY)
+  AND (protoPayload.resource = '/neubot' OR protoPayload.resource = '/ndt')
+  AND protoPayload.userAgent IS NULL
+  AND protoPayload.ip IN ( SELECT RequesterIP FROM RequesterIPs  )
+GROUP BY
+  RequesterIP, protoPayload.resource, protoPayload.userAgent
+ORDER BY
+  RequesterIP, RequestsPerDay DESC
+`
