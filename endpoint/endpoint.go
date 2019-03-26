@@ -257,6 +257,13 @@ WITH nsRequests AS (
       AND protoPayload.starttime > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 DAY)
       AND (protoPayload.resource = '/neubot' OR protoPayload.resource = '/ndt')
       AND protoPayload.userAgent is NULL
+      AND NOT (
+          protoPayload.startTime BETWEEN TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 0 MINUTE) AND TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 20 MINUTE) OR
+          protoPayload.startTime BETWEEN TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 82 MINUTE) AND TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 380 MINUTE) OR
+          protoPayload.startTime BETWEEN TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 442 MINUTE) AND TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 740 MINUTE) OR
+          protoPayload.startTime BETWEEN TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 802 MINUTE) AND TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 1100 MINUTE) OR
+          protoPayload.startTime BETWEEN TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 1162 MINUTE) AND TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 1440 MINUTE)
+      )
     GROUP BY
       RequesterIP, Resource, UserAgent, period
   )
@@ -272,10 +279,10 @@ RequesterIPs AS (
 
 
 SELECT
-	protoPayload.ip AS RequesterIP,
-	protoPayload.resource as resource,
-	protoPayload.userAgent as userAgent,
-	COUNT(*) as RequestsPerDay
+    protoPayload.ip AS RequesterIP,
+    protoPayload.resource as resource,
+    protoPayload.userAgent as userAgent,
+    COUNT(*) as RequestsPerDay
 FROM
   ` + "`mlab-ns.exports.appengine_googleapis_com_request_log_*`" + `
 WHERE
