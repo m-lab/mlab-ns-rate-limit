@@ -230,53 +230,76 @@ ORDER BY
   RequestsPerDay DESC
 LIMIT 20000`
 
-// sixHourQuery looks for clients that only run every six hours and issue requests
+// sixHourQuery looks for clients that run every six hours and issue requests
 // to both /ndt and /neubot.
 var sixHourQuery = `
-WITH nsRequests AS (
-  SELECT
-    RequesterIP, Resource, UserAgent, SUM(period) as total
-  FROM (
+WITH
+  clientsInSixHourPeriods AS (
     SELECT
-      protoPayload.ip as RequesterIP,
-      protoPayload.resource as Resource,
-      protopayload.userAgent as UserAgent,
-      COUNT(*) AS RequestsPerDay,
+      protoPayload.ip as ip,
+      protoPayload.resource as resource,
+      COUNT(*) AS requestsPerDay,
       CASE
-        WHEN protoPayload.startTime BETWEEN TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 20 MINUTE) AND TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 82 MINUTE) THEN 1
-        WHEN protoPayload.startTime BETWEEN TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 380 MINUTE) AND TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 442 MINUTE) THEN 2
-        WHEN protoPayload.startTime BETWEEN TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 740 MINUTE) AND TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 802 MINUTE) THEN 4
-        WHEN protoPayload.startTime BETWEEN TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 1100 MINUTE) AND TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 1162 MINUTE) THEN 8
+        WHEN protoPayload.startTime BETWEEN TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 19 MINUTE) AND TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 81 MINUTE) THEN 1
+        WHEN protoPayload.startTime BETWEEN TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 379 MINUTE) AND TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 441 MINUTE) THEN 2
+        WHEN protoPayload.startTime BETWEEN TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 739 MINUTE) AND TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 801 MINUTE) THEN 4
+        WHEN protoPayload.startTime BETWEEN TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 1099 MINUTE) AND TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 1161 MINUTE) THEN 8
         ELSE 0
       END AS period
     FROM
   ` + "`mlab-ns.exports.appengine_googleapis_com_request_log_*`" + `
     WHERE
-          (_table_suffix = FORMAT_DATE("%Y%m%d", CURRENT_DATE())
-      OR  _table_suffix = FORMAT_DATE("%Y%m%d", DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)))
-      AND protoPayload.starttime > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 DAY)
+         (_table_suffix = FORMAT_DATE("%Y%m%d", CURRENT_DATE())
+      OR  _table_suffix = FORMAT_DATE("%Y%m%d", DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY))
+      OR  _table_suffix = FORMAT_DATE("%Y%m%d", DATE_SUB(CURRENT_DATE(), INTERVAL 2 DAY))
+      AND protoPayload.starttime > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 2 DAY))
       AND (protoPayload.resource = '/neubot' OR protoPayload.resource = '/ndt')
       AND protoPayload.userAgent is NULL
-      AND NOT (
-          protoPayload.startTime BETWEEN TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 0 MINUTE) AND TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 20 MINUTE) OR
-          protoPayload.startTime BETWEEN TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 82 MINUTE) AND TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 380 MINUTE) OR
-          protoPayload.startTime BETWEEN TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 442 MINUTE) AND TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 740 MINUTE) OR
-          protoPayload.startTime BETWEEN TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 802 MINUTE) AND TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 1100 MINUTE) OR
-          protoPayload.startTime BETWEEN TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 1162 MINUTE) AND TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 1440 MINUTE)
+    GROUP BY
+      -- Also group by 'period' to guarantee that we only have one representative
+      -- request from each ip and resource.
+      ip, resource, period
+  ),
+  clientsOutsideSixHourPeriods AS (
+    SELECT
+      protoPayload.ip as ip
+    FROM
+  ` + "`mlab-ns.exports.appengine_googleapis_com_request_log_*`" + `
+    WHERE
+         (_table_suffix = FORMAT_DATE("%Y%m%d", CURRENT_DATE())
+      OR  _table_suffix = FORMAT_DATE("%Y%m%d", DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY))
+      OR  _table_suffix = FORMAT_DATE("%Y%m%d", DATE_SUB(CURRENT_DATE(), INTERVAL 2 DAY))
+      AND protoPayload.starttime > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 2 DAY))
+      AND (protoPayload.resource = '/neubot' OR protoPayload.resource = '/ndt')
+      AND protoPayload.userAgent is NULL
+      AND (
+          protoPayload.startTime BETWEEN TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 0 MINUTE) AND TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 19 MINUTE) OR
+          protoPayload.startTime BETWEEN TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 81 MINUTE) AND TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 379 MINUTE) OR
+          protoPayload.startTime BETWEEN TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 441 MINUTE) AND TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 739 MINUTE) OR
+          protoPayload.startTime BETWEEN TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 801 MINUTE) AND TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 1099 MINUTE) OR
+          protoPayload.startTime BETWEEN TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 1161 MINUTE) AND TIMESTAMP_ADD(TIMESTAMP_TRUNC(protoPayload.startTime, DAY), INTERVAL 1440 MINUTE)
       )
     GROUP BY
-      RequesterIP, Resource, UserAgent, period
+      ip
+  ),
+  nsRequestsInSixHourPeriods AS (
+    SELECT
+      ip, resource, SUM(period) as total
+    FROM
+      clientsInSixHourPeriods
+    WHERE
+      ip NOT IN ( SELECT ip FROM clientsOutsideSixHourPeriods )
+    GROUP BY
+      ip, resource
+	  HAVING
+	    -- Guarantee that each client runs in each period.
+      total != 0 AND MOD(total, 15) = 0
+  ),
+  uniqueIPsInSixHourPeriods AS (
+    (SELECT ip FROM nsRequestsInSixHourPeriods WHERE resource = "/neubot"
+     intersect DISTINCT
+     SELECT ip FROM nsRequestsInSixHourPeriods WHERE Resource = "/ndt")
   )
-  GROUP BY
-    RequesterIP, Resource, UserAgent
-  HAVING
-    total != 0 AND MOD(total, 15) = 0
-),
-RequesterIPs AS (
-  (select RequesterIP from nsRequests WHERE Resource = "/neubot"
-   intersect DISTINCT
-   select RequesterIP from nsRequests WHERE Resource = "/ndt"))
-
 
 SELECT
     protoPayload.ip AS RequesterIP,
@@ -286,14 +309,15 @@ SELECT
 FROM
   ` + "`mlab-ns.exports.appengine_googleapis_com_request_log_*`" + `
 WHERE
-      (_table_suffix = FORMAT_DATE("%Y%m%d", CURRENT_DATE())
-      OR  _table_suffix = FORMAT_DATE("%Y%m%d", DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)))
-      AND protoPayload.starttime > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 DAY)
+     (_table_suffix = FORMAT_DATE("%Y%m%d", CURRENT_DATE())
+  OR  _table_suffix = FORMAT_DATE("%Y%m%d", DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY))
+  OR  _table_suffix = FORMAT_DATE("%Y%m%d", DATE_SUB(CURRENT_DATE(), INTERVAL 2 DAY))
+  AND protoPayload.starttime > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 2 DAY))
   AND (protoPayload.resource = '/neubot' OR protoPayload.resource = '/ndt')
   AND protoPayload.userAgent IS NULL
-  AND protoPayload.ip IN ( SELECT RequesterIP FROM RequesterIPs  )
+  AND protoPayload.ip IN ( SELECT ip FROM uniqueIPsInSixHourPeriods )
 GROUP BY
   RequesterIP, protoPayload.resource, protoPayload.userAgent
 ORDER BY
-  RequesterIP, RequestsPerDay DESC
+	RequesterIP, RequestsPerDay DESC
 `
