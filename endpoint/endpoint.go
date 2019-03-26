@@ -297,7 +297,7 @@ WITH
   uniqueIPsInSixHourPeriods AS (
     (SELECT ip FROM nsRequestsInSixHourPeriods WHERE resource = "/neubot" AND ip NOT IN ( SELECT ip FROM clientsOutsideSixHourPeriods )
      intersect DISTINCT
-     SELECT ip FROM nsRequestsInSixHourPeriods WHERE Resource = "/ndt" AND ip NOT IN ( SELECT ip FROM clientsOutsideSixHourPeriods ))
+     SELECT ip FROM nsRequestsInSixHourPeriods WHERE resource = "/ndt" AND ip NOT IN ( SELECT ip FROM clientsOutsideSixHourPeriods ))
   )
 
 SELECT
