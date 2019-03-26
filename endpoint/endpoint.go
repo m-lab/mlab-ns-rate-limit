@@ -289,14 +289,15 @@ WITH
       clientsInSixHourPeriods
     GROUP BY
       ip, resource
-	  HAVING
-	    -- Guarantee that each client runs in each period.
-      total != 0 AND MOD(total, 15) = 0
+    HAVING
+      -- Guarantee that each client runs in each period by totaling the 'period'
+      -- values. If all periods are represented, then the sum(1 + 2 + 4 + 8) = 15.
+      total != 0 AND total = 15
   ),
   uniqueIPsInSixHourPeriods AS (
     (SELECT ip FROM nsRequestsInSixHourPeriods WHERE resource = "/neubot" AND ip NOT IN ( SELECT ip FROM clientsOutsideSixHourPeriods )
      intersect DISTINCT
-		 SELECT ip FROM nsRequestsInSixHourPeriods WHERE Resource = "/ndt" AND ip NOT IN ( SELECT ip FROM clientsOutsideSixHourPeriods ))
+     SELECT ip FROM nsRequestsInSixHourPeriods WHERE Resource = "/ndt" AND ip NOT IN ( SELECT ip FROM clientsOutsideSixHourPeriods ))
   )
 
 SELECT
@@ -317,5 +318,5 @@ WHERE
 GROUP BY
   RequesterIP, protoPayload.resource, protoPayload.userAgent
 ORDER BY
-	RequesterIP, RequestsPerDay DESC
+  RequesterIP, RequestsPerDay DESC
 `
