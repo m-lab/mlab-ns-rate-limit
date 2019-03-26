@@ -287,8 +287,6 @@ WITH
       ip, resource, SUM(period) as total
     FROM
       clientsInSixHourPeriods
-    WHERE
-      ip NOT IN ( SELECT ip FROM clientsOutsideSixHourPeriods )
     GROUP BY
       ip, resource
 	  HAVING
@@ -296,9 +294,9 @@ WITH
       total != 0 AND MOD(total, 15) = 0
   ),
   uniqueIPsInSixHourPeriods AS (
-    (SELECT ip FROM nsRequestsInSixHourPeriods WHERE resource = "/neubot"
+    (SELECT ip FROM nsRequestsInSixHourPeriods WHERE resource = "/neubot" AND ip NOT IN ( SELECT ip FROM clientsOutsideSixHourPeriods )
      intersect DISTINCT
-     SELECT ip FROM nsRequestsInSixHourPeriods WHERE Resource = "/ndt")
+		 SELECT ip FROM nsRequestsInSixHourPeriods WHERE Resource = "/ndt" AND ip NOT IN ( SELECT ip FROM clientsOutsideSixHourPeriods ))
   )
 
 SELECT
