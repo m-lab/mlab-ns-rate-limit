@@ -64,10 +64,10 @@ deploy:
 # Testing: deploy to ns-sandbox for testing purpose.
 - provider: script
   script:
-    export PROJECT_ID="mlab-nstesting" &&
+    export PROJECT_ID="mlab-sandbox" &&
     export BQ_PROJECT="mlab-ns" &&
     export BQ_DATASET="exports" &&
-    $TRAVIS_BUILD_DIR/travis/deploy_app.sh mlab-nstesting SERVICE_ACCOUNT_mlab_nstesting $TRAVIS_BUILD_DIR/appengine/rate_table
+    $TRAVIS_BUILD_DIR/travis/deploy_app.sh mlab-sandbox SERVICE_ACCOUNT_mlab_sandbox $TRAVIS_BUILD_DIR/appengine/rate_table
   skip_cleanup: true
   on:
     repo: m-lab/mlab-ns-rate-limit
