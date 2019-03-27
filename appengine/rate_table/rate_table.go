@@ -8,9 +8,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"cloud.google.com/go/bigquery"
 	"cloud.google.com/go/datastore"
@@ -19,6 +19,7 @@ import (
 	"github.com/m-lab/mlab-ns-rate-limit/metrics"
 	"google.golang.org/api/option"
 	"google.golang.org/appengine"
+	"google.golang.org/appengine/log"
 	"google.golang.org/appengine/memcache"
 )
 
@@ -35,7 +36,7 @@ import (
 
 func init() {
 	// Always prepend the filename and line number.
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
+	// log.SetFlags(log.LstdFlags | log.Lshortfile)
 	http.HandleFunc("/", defaultHandler)
 	http.HandleFunc("/benchmark", benchmark)
 	http.HandleFunc("/status", Status)
@@ -108,31 +109,33 @@ func Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := appengine.NewContext(r)
+	ctx, cancel := context.WithDeadline(ctx, time.Now().Add(time.Minute))
+	defer cancel()
 	dsExt, err := NewDataset(ctx, bqProject, dataset)
 	if err != nil {
-		log.Println(err)
+		log.Warningf(ctx, "Dataset: %v", err)
 		metrics.FailCount.WithLabelValues("dataset").Inc()
-		http.Error(w, `{"message": "`+err.Error()+`"}`, http.StatusInternalServerError)
+		http.Error(w, `{"message": "Dataset: `+err.Error()+`"}`, http.StatusInternalServerError)
 		return
 	}
 	// Fetch all client signatures that exceed threshold
 	rows, err := endpoint.FetchEndpointStats(ctx, &dsExt, threshold)
 	if err != nil {
-		log.Println(err)
+		log.Warningf(ctx, "Fetch: %v", err)
 		metrics.FailCount.WithLabelValues("fetch").Inc()
-		http.Error(w, `{"message": "`+err.Error()+`"}`, http.StatusInternalServerError)
+		http.Error(w, `{"message": "Fetch: `+err.Error()+`"}`, http.StatusInternalServerError)
 		return
 	}
 
 	keys, endpoints, err := endpoint.MakeKeysAndStats(rows)
 	if err != nil {
-		log.Println(err)
+		log.Warningf(ctx, "MakeKeysAndStats: %v", err)
 		metrics.FailCount.WithLabelValues("make").Inc()
-		http.Error(w, `{"message": "`+err.Error()+`"}`, http.StatusInternalServerError)
+		http.Error(w, `{"message": "MakeKeysAndStats: `+err.Error()+`"}`, http.StatusInternalServerError)
 		return
 	}
 
-	log.Println(len(keys))
+	log.Debugf(ctx, "len(keys): %d", len(keys))
 	if len(keys) > 19999 {
 		metrics.WarningCount.WithLabelValues("more than 20K bad clients").Inc()
 	} else if len(keys) == 0 {
@@ -141,7 +144,7 @@ func Update(w http.ResponseWriter, r *http.Request) {
 
 	client, err := datastore.NewClient(ctx, projectID)
 	if err != nil {
-		log.Println(err)
+		log.Warningf(ctx, "datastore.NewClient: %v", err)
 		metrics.FailCount.WithLabelValues("client").Inc()
 		http.Error(w, `{"message": "`+err.Error()+`"}`, http.StatusInternalServerError)
 		return
@@ -152,7 +155,7 @@ func Update(w http.ResponseWriter, r *http.Request) {
 	err = endpoint.PutMulti(ctx, client, keys, endpoints)
 	if err != nil {
 		metrics.FailCount.WithLabelValues("put-multi").Inc()
-		log.Println(err)
+		log.Warningf(ctx, "PutMulti: %v", err)
 		http.Error(w, `{"message": "`+err.Error()+`"}`, http.StatusInternalServerError)
 		return
 	}
@@ -184,7 +187,7 @@ func benchmark(w http.ResponseWriter, r *http.Request) {
 func benchmarkMemcacheGet(ctx context.Context) {
 	ctx, err := appengine.Namespace(ctx, "memcache_requests")
 	if err != nil {
-		log.Fatal(err)
+		log.Criticalf(ctx, "Namespace: %v", err)
 	}
 
 	ep := endpoint.Stats{
@@ -193,17 +196,17 @@ func benchmarkMemcacheGet(ctx context.Context) {
 	}
 	epJSON, err := json.Marshal(ep)
 	if err != nil {
-		log.Fatal(err)
+		log.Criticalf(ctx, "Marshal: %v", err)
 	}
 	key := "foobar"
 	// Set the item, unconditionally
 	if err := memcache.Set(ctx, &memcache.Item{Key: key, Value: epJSON}); err != nil {
-		log.Fatalf("error setting item: %v", err)
+		log.Criticalf(ctx, "memcache.Set: %v", err)
 	}
 
 	for i := 0; i < 1000; i++ {
 		if _, err := memcache.Get(ctx, key); err != nil {
-			log.Fatal(err)
+			log.Criticalf(ctx, "memcache.Get: %v", err)
 		}
 	}
 }
