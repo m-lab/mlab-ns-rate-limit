@@ -10,13 +10,14 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"runtime"
+	"strconv"
 	"time"
 
 	"cloud.google.com/go/bigquery"
 	"cloud.google.com/go/datastore"
 	"github.com/m-lab/go/bqext"
 	"github.com/m-lab/mlab-ns-rate-limit/endpoint"
-	"github.com/m-lab/mlab-ns-rate-limit/metrics"
 	"google.golang.org/api/option"
 	"google.golang.org/appengine"
 	"google.golang.org/appengine/log"
@@ -36,7 +37,6 @@ import (
 
 func init() {
 	// Always prepend the filename and line number.
-	// log.SetFlags(log.LstdFlags | log.Lshortfile)
 	http.HandleFunc("/", defaultHandler)
 	http.HandleFunc("/benchmark", benchmark)
 	http.HandleFunc("/status", Status)
@@ -91,71 +91,74 @@ func Update(w http.ResponseWriter, r *http.Request) {
 	threshold := 12                             // requests per day
 	projectID, ok := os.LookupEnv("PROJECT_ID") // Datastore output project
 	if ok != true {
-		metrics.FailCount.WithLabelValues("environ").Inc()
+		// metrics.FailCount.WithLabelValues("environ").Inc()
 		http.Error(w, `{"message": "PROJECT_ID not defined"}`, http.StatusInternalServerError)
 		return
 	}
 	bqProject, ok := os.LookupEnv("BQ_PROJECT")
 	if ok != true {
-		metrics.FailCount.WithLabelValues("environ").Inc()
+		// metrics.FailCount.WithLabelValues("environ").Inc()
 		http.Error(w, `{"message": "BQ_PROJECT not defined"}`, http.StatusInternalServerError)
 		return
 	}
 	dataset, ok := os.LookupEnv("BQ_DATASET")
 	if ok != true {
-		metrics.FailCount.WithLabelValues("environ").Inc()
+		// metrics.FailCount.WithLabelValues("environ").Inc()
 		http.Error(w, `{"message": "BQ_DATASET not defined"}`, http.StatusInternalServerError)
 		return
 	}
 
+	// NB: The default deadline was observed to be about 5s which is much too short
+	// for our query. Here we set deadline explicitly to allow up to 5m for the
+	// query to complete. This should be ample.
 	ctx := appengine.NewContext(r)
-	ctx, cancel := context.WithDeadline(ctx, time.Now().Add(time.Minute))
+	ctx, cancel := context.WithDeadline(ctx, time.Now().Add(5*time.Minute))
 	defer cancel()
 	dsExt, err := NewDataset(ctx, bqProject, dataset)
 	if err != nil {
-		log.Warningf(ctx, "Dataset: %v", err)
-		metrics.FailCount.WithLabelValues("dataset").Inc()
+		logWarning(ctx, "Dataset: %v", err)
+		// metrics.FailCount.WithLabelValues("dataset").Inc()
 		http.Error(w, `{"message": "Dataset: `+err.Error()+`"}`, http.StatusInternalServerError)
 		return
 	}
 	// Fetch all client signatures that exceed threshold
 	rows, err := endpoint.FetchEndpointStats(ctx, &dsExt, threshold)
 	if err != nil {
-		log.Warningf(ctx, "Fetch: %v", err)
-		metrics.FailCount.WithLabelValues("fetch").Inc()
+		logWarning(ctx, "Fetch: %v", err)
+		// metrics.FailCount.WithLabelValues("fetch").Inc()
 		http.Error(w, `{"message": "Fetch: `+err.Error()+`"}`, http.StatusInternalServerError)
 		return
 	}
 
 	keys, endpoints, err := endpoint.MakeKeysAndStats(rows)
 	if err != nil {
-		log.Warningf(ctx, "MakeKeysAndStats: %v", err)
-		metrics.FailCount.WithLabelValues("make").Inc()
+		logWarning(ctx, "MakeKeysAndStats: %v", err)
+		// metrics.FailCount.WithLabelValues("make").Inc()
 		http.Error(w, `{"message": "MakeKeysAndStats: `+err.Error()+`"}`, http.StatusInternalServerError)
 		return
 	}
 
-	log.Debugf(ctx, "len(keys): %d", len(keys))
+	logDebug(ctx, "len(keys): %d", len(keys))
 	if len(keys) > 19999 {
-		metrics.WarningCount.WithLabelValues("more than 20K bad clients").Inc()
+		// metrics.WarningCount.WithLabelValues("more than 20K bad clients").Inc()
 	} else if len(keys) == 0 {
-		metrics.WarningCount.WithLabelValues("no bad clients").Inc()
+		// metrics.WarningCount.WithLabelValues("no bad clients").Inc()
 	}
 
 	client, err := datastore.NewClient(ctx, projectID)
 	if err != nil {
-		log.Warningf(ctx, "datastore.NewClient: %v", err)
-		metrics.FailCount.WithLabelValues("client").Inc()
+		logWarning(ctx, "datastore.NewClient: %v", err)
+		// metrics.FailCount.WithLabelValues("client").Inc()
 		http.Error(w, `{"message": "`+err.Error()+`"}`, http.StatusInternalServerError)
 		return
 	}
 
-	metrics.BadEndpointCount.Set(float64(len(keys)))
+	// metrics.BadEndpointCount.Set(float64(len(keys)))
 
 	err = endpoint.PutMulti(ctx, client, keys, endpoints)
 	if err != nil {
-		metrics.FailCount.WithLabelValues("put-multi").Inc()
-		log.Warningf(ctx, "PutMulti: %v", err)
+		// metrics.FailCount.WithLabelValues("put-multi").Inc()
+		logWarning(ctx, "PutMulti: %v", err)
 		http.Error(w, `{"message": "`+err.Error()+`"}`, http.StatusInternalServerError)
 		return
 	}
@@ -163,6 +166,7 @@ func Update(w http.ResponseWriter, r *http.Request) {
 	// TODO - clean up obsolete endpoints
 	// TODO - handle bloom filter
 	// TODO - update memcache
+	fmt.Fprintf(w, "ok")
 }
 
 const defaultMessage = "<html><body>This is not the app you're looking for.</body></html>"
@@ -187,7 +191,7 @@ func benchmark(w http.ResponseWriter, r *http.Request) {
 func benchmarkMemcacheGet(ctx context.Context) {
 	ctx, err := appengine.Namespace(ctx, "memcache_requests")
 	if err != nil {
-		log.Criticalf(ctx, "Namespace: %v", err)
+		logCritical(ctx, "Namespace: %v", err)
 	}
 
 	ep := endpoint.Stats{
@@ -196,17 +200,38 @@ func benchmarkMemcacheGet(ctx context.Context) {
 	}
 	epJSON, err := json.Marshal(ep)
 	if err != nil {
-		log.Criticalf(ctx, "Marshal: %v", err)
+		logCritical(ctx, "Marshal: %v", err)
 	}
 	key := "foobar"
 	// Set the item, unconditionally
 	if err := memcache.Set(ctx, &memcache.Item{Key: key, Value: epJSON}); err != nil {
-		log.Criticalf(ctx, "memcache.Set: %v", err)
+		logCritical(ctx, "memcache.Set: %v", err)
 	}
 
 	for i := 0; i < 1000; i++ {
 		if _, err := memcache.Get(ctx, key); err != nil {
-			log.Criticalf(ctx, "memcache.Get: %v", err)
+			logCritical(ctx, "memcache.Get: %v", err)
 		}
 	}
+}
+
+func getLine() string {
+	_, file, line, ok := runtime.Caller(2)
+	if !ok {
+		file = "???"
+		line = 0
+	}
+	return file + ":" + strconv.Itoa(line) + " "
+}
+
+func logCritical(ctx context.Context, format string, args ...interface{}) {
+	log.Criticalf(ctx, getLine()+format, args...)
+}
+
+func logWarning(ctx context.Context, format string, args ...interface{}) {
+	log.Warningf(ctx, getLine()+format, args...)
+}
+
+func logDebug(ctx context.Context, format string, args ...interface{}) {
+	log.Debugf(ctx, getLine()+format, args...)
 }
