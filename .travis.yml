@@ -61,7 +61,7 @@ before_deploy:
 - echo $SUBST_TAGS
 
 deploy:
-# Testing: deploy to ns-sandbox for testing purpose.
+# Testing: deploy to mlab-sandbox for testing purpose.
 - provider: script
   script:
     export PROJECT_ID="mlab-sandbox" &&
@@ -73,3 +73,16 @@ deploy:
     repo: m-lab/mlab-ns-rate-limit
     all_branches: true
     condition: $TRAVIS_BRANCH == sandbox-* && $TRAVIS_EVENT_TYPE == push
+
+# Staging: deploy to mlab-staging.
+- provider: script
+  script:
+    export PROJECT_ID="mlab-staging" &&
+    export BQ_PROJECT="mlab-ns" &&
+    export BQ_DATASET="exports" &&
+    $TRAVIS_BUILD_DIR/travis/deploy_app.sh mlab-staging SERVICE_ACCOUNT_mlab_staging $TRAVIS_BUILD_DIR/appengine/rate_table
+  skip_cleanup: true
+  on:
+    repo: m-lab/mlab-ns-rate-limit
+    all_branches: true
+    condition: $TRAVIS_BRANCH == master && $TRAVIS_EVENT_TYPE == push
