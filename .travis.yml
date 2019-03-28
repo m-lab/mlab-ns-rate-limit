@@ -97,4 +97,6 @@ deploy:
   skip_cleanup: true
   on:
     repo: m-lab/mlab-ns-rate-limit
-    tags: true
+    all_branches: true
+    # NB: match version strings like: v0.3.10
+    condition: $TRAVIS_TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+
