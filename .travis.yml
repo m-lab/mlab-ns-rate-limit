@@ -86,3 +86,15 @@ deploy:
     repo: m-lab/mlab-ns-rate-limit
     all_branches: true
     condition: $TRAVIS_BRANCH == master && $TRAVIS_EVENT_TYPE == push
+
+# Production: deploy to mlab-ns project
+- provider: script
+  script:
+    export PROJECT_ID="mlab-ns" &&
+    export BQ_PROJECT="mlab-ns" &&
+    export BQ_DATASET="exports" &&
+    $TRAVIS_BUILD_DIR/travis/deploy_app.sh mlab-ns SERVICE_ACCOUNT_mlab_ns $TRAVIS_BUILD_DIR/appengine/rate_table
+  skip_cleanup: true
+  on:
+    repo: m-lab/mlab-ns-rate-limit
+    tags: true
