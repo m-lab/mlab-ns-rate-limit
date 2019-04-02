@@ -16,12 +16,12 @@ import (
 
 	"cloud.google.com/go/bigquery"
 	"cloud.google.com/go/datastore"
+	"github.com/golang/appengine/memcache"
 	"github.com/m-lab/go/bqext"
 	"github.com/m-lab/mlab-ns-rate-limit/endpoint"
 	"google.golang.org/api/option"
 	"google.golang.org/appengine"
 	"google.golang.org/appengine/log"
-	"google.golang.org/appengine/memcache"
 )
 
 // 1.  Datastore stuff
@@ -39,6 +39,7 @@ func init() {
 	// Always prepend the filename and line number.
 	http.HandleFunc("/", defaultHandler)
 	http.HandleFunc("/benchmark", benchmark)
+	http.HandleFunc("/memcache", memcacheHandler)
 	http.HandleFunc("/status", Status)
 	http.HandleFunc("/update", Update)
 }
@@ -145,6 +146,14 @@ func Update(w http.ResponseWriter, r *http.Request) {
 		// metrics.WarningCount.WithLabelValues("no bad clients").Inc()
 	}
 
+	err = endpoint.SetMulti(ctx, keys, endpoints)
+	if err != nil {
+		// metrics.FailCount.WithLabelValues("put-multi").Inc()
+		logWarning(ctx, "SetMulti: %v", err)
+		http.Error(w, `{"message": "`+err.Error()+`"}`, http.StatusInternalServerError)
+		return
+	}
+
 	client, err := datastore.NewClient(ctx, projectID)
 	if err != nil {
 		logWarning(ctx, "datastore.NewClient: %v", err)
@@ -152,8 +161,6 @@ func Update(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"message": "`+err.Error()+`"}`, http.StatusInternalServerError)
 		return
 	}
-
-	// metrics.BadEndpointCount.Set(float64(len(keys)))
 
 	err = endpoint.PutMulti(ctx, client, keys, endpoints)
 	if err != nil {
@@ -178,6 +185,29 @@ func defaultHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	fmt.Fprintf(w, defaultMessage)
+}
+
+func memcacheHandler(w http.ResponseWriter, r *http.Request) {
+	c := appengine.NewContext(r)
+
+	ctx, err := appengine.Namespace(c, "soltesz_memcache_test")
+	if err != nil {
+		logCritical(ctx, "Namespace: %v", err)
+	}
+
+	if err := memcache.Set(ctx, &memcache.Item{Key: "rl-string", Value: []byte("hello"), Expiration: time.Hour}); err != nil {
+		logCritical(ctx, "memcache.Set: %v", err)
+		return
+	}
+	if err := memcache.Set(ctx, &memcache.Item{Key: "rl-int", Value: []byte("134"), Expiration: time.Hour}); err != nil {
+		logCritical(ctx, "memcache.Set: %v", err)
+		return
+	}
+	if err := memcache.Set(ctx, &memcache.Item{Key: "rl-float", Value: []byte("0.134"), Expiration: time.Hour}); err != nil {
+		logCritical(ctx, "memcache.Set: %v", err)
+		return
+	}
+	fmt.Fprintf(w, "ok")
 }
 
 func benchmark(w http.ResponseWriter, r *http.Request) {
