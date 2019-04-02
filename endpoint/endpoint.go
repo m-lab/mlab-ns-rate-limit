@@ -213,7 +213,7 @@ func PutMulti(ctx context.Context, client *datastore.Client, keys []*datastore.K
 // encoded integer. Readers should parse the value as an int, then divide by 10000
 // to recover the original probability.
 func SetMulti(c context.Context, keys []*datastore.Key, endpoints []Stats) error {
-	ctx, err := appengine.Namespace(c, "soltesz_memcache_test")
+	ctx, err := appengine.Namespace(c, "memcache_requests")
 	if err != nil {
 		return err
 	}
@@ -238,9 +238,7 @@ func SetMulti(c context.Context, keys []*datastore.Key, endpoints []Stats) error
 			return err
 		}
 	}
-	log.Println("Put", len(keys), "entities")
-	return memcache.Set(ctx, &memcache.Item{Key: "soltesz-finish", Value: []byte("hello"), Expiration: time.Hour})
-	// return nil
+	return memcache.Set(ctx, &memcache.Item{Key: "sanity_check", Value: []byte("success"), Expiration: time.Hour})
 }
 
 // simpleQuery queries the stackdriver request log table, and extracts the count
