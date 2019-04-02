@@ -18,6 +18,8 @@ import (
 	"cloud.google.com/go/datastore"
 	"github.com/m-lab/go/bqext"
 	"google.golang.org/api/iterator"
+	"google.golang.org/appengine"
+	"google.golang.org/appengine/memcache"
 )
 
 const (
@@ -204,6 +206,41 @@ func PutMulti(ctx context.Context, client *datastore.Client, keys []*datastore.K
 
 	log.Println("Put", len(keys), "entities")
 	return lastError
+}
+
+// SetMulti writes the keys and endpoints Probability. To preserve cross-language
+// compatibility, SetMulti formats the endpoints Probability (float) as a string
+// encoded integer. Readers should parse the value as an int, then divide by 10000
+// to recover the original probability.
+func SetMulti(c context.Context, keys []*datastore.Key, endpoints []Stats) error {
+	ctx, err := appengine.Namespace(c, "soltesz_memcache_test")
+	if err != nil {
+		return err
+	}
+	count := 0
+	for start := 0; start < len(keys); start = start + 500 {
+		count++
+		end := start + 500
+		if end > len(keys) {
+			end = len(keys)
+		}
+
+		var items []*memcache.Item
+		for i := range keys[start:end] {
+			items = append(items, &memcache.Item{
+				Key:        keys[i].Name,
+				Value:      []byte(fmt.Sprintf("%d", int(endpoints[i].Probability*10000))),
+				Expiration: time.Hour,
+			})
+		}
+		err := memcache.SetMulti(ctx, items)
+		if err != nil {
+			return err
+		}
+	}
+	log.Println("Put", len(keys), "entities")
+	return memcache.Set(ctx, &memcache.Item{Key: "soltesz-finish", Value: []byte("hello"), Expiration: time.Hour})
+	// return nil
 }
 
 // simpleQuery queries the stackdriver request log table, and extracts the count

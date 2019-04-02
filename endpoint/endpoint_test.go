@@ -15,6 +15,7 @@ import (
 	"cloud.google.com/go/datastore"
 	"github.com/m-lab/go/bqext"
 	"github.com/m-lab/mlab-ns-rate-limit/endpoint"
+	"google.golang.org/appengine/aetest"
 )
 
 func init() {
@@ -116,7 +117,12 @@ func TestCreateTestEntries(t *testing.T) {
 		log.Fatal(err)
 	}
 
-	ctx := context.Background()
+	ctx, done, err := aetest.NewContext()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer done()
+
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
@@ -128,6 +134,12 @@ func TestCreateTestEntries(t *testing.T) {
 
 	// Save all the keys
 	err = endpoint.PutMulti(ctx, client, keys, endpoints)
+	if err != nil {
+		log.Fatalf("Failed: %v", err)
+	}
+
+	// Save all the keys
+	err = endpoint.SetMulti(ctx, keys, endpoints)
 	if err != nil {
 		log.Fatalf("Failed: %v", err)
 	}
