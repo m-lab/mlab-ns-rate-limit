@@ -153,6 +153,7 @@ func Update(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"message": "`+err.Error()+`"}`, http.StatusInternalServerError)
 		return
 	}
+	logDebug(ctx, "Set %d endpoint keys in memcache", len(keys))
 
 	client, err := datastore.NewClient(ctx, projectID)
 	if err != nil {
