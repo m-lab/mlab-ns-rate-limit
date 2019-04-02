@@ -228,15 +228,19 @@ func SetMulti(c context.Context, keys []*datastore.Key, endpoints []Stats) error
 		var items []*memcache.Item
 		for i := range keys[start:end] {
 			items = append(items, &memcache.Item{
-				Key:        keys[i].Name,
-				Value:      []byte(fmt.Sprintf("%d", int(endpoints[i].Probability*10000))),
+				Key:        keys[start+i].Name,
+				Value:      []byte(fmt.Sprintf("%d", int(endpoints[start+i].Probability*10000))),
 				Expiration: time.Hour,
 			})
 		}
-		err := memcache.SetMulti(ctx, items)
+		err = memcache.SetMulti(ctx, items)
 		if err != nil {
 			return err
 		}
+
+		// Guarantee that we stay under memcache "dedicated" SLO of 10k ops/sec/GB.
+		//   1_sec / (10000_ops / 500_ops/batch ) == 0.050_sec/batch.
+		time.Sleep(time.Millisecond * 50)
 	}
 	return memcache.Set(ctx, &memcache.Item{Key: "sanity_check", Value: []byte("success"), Expiration: time.Hour})
 }
