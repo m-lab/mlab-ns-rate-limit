@@ -41,7 +41,7 @@ func init() {
 	http.HandleFunc("/benchmark", benchmark)
 	http.HandleFunc("/memcache", memcacheHandler)
 	http.HandleFunc("/status", Status)
-	http.HandleFunc("/update", Update)
+	http.HandleFunc("/update_request_signatures", Update)
 }
 
 // Status writes an instance summary into the response.
