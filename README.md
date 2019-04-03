@@ -6,3 +6,5 @@ Status](https://coveralls.io/repos/m-lab/mlab-ns-rate-limit/badge.svg?branch=mas
 # mlab-ns-rate-limit
 Rate limiting support for mlab-ns
 
+TODO: memcache.
+
