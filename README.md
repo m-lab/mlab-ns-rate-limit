@@ -16,7 +16,7 @@ signatures back _from_ memcache.
 Because mlab-ns-rate-limit is written in Go, and mlab-ns is written in
 Python, and memcache exposes a generic byte array in Go but a type-aware
 serializer for Python, the two services cannot parse each other's data without
-special handling.
+adopting a shared convention.
 
 In our case, we use base 10, ASCII encoded integers, which encode fixed point
 decimal values with precision up to 0.0001. For example, to encode a probability
