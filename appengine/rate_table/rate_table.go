@@ -39,7 +39,6 @@ func init() {
 	// Always prepend the filename and line number.
 	http.HandleFunc("/", defaultHandler)
 	http.HandleFunc("/benchmark", benchmark)
-	http.HandleFunc("/memcache", memcacheHandler)
 	http.HandleFunc("/status", Status)
 	http.HandleFunc("/update_request_signatures", Update)
 }
@@ -197,29 +196,6 @@ func defaultHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	fmt.Fprintf(w, defaultMessage)
-}
-
-func memcacheHandler(w http.ResponseWriter, r *http.Request) {
-	c := appengine.NewContext(r)
-
-	ctx, err := appengine.Namespace(c, "soltesz_memcache_test")
-	if err != nil {
-		logCritical(ctx, "Namespace: %v", err)
-	}
-
-	if err := memcache.Set(ctx, &memcache.Item{Key: "rl-string", Value: []byte("hello"), Expiration: time.Hour}); err != nil {
-		logCritical(ctx, "memcache.Set: %v", err)
-		return
-	}
-	if err := memcache.Set(ctx, &memcache.Item{Key: "rl-int", Value: []byte("134"), Expiration: time.Hour}); err != nil {
-		logCritical(ctx, "memcache.Set: %v", err)
-		return
-	}
-	if err := memcache.Set(ctx, &memcache.Item{Key: "rl-float", Value: []byte("0.134"), Expiration: time.Hour}); err != nil {
-		logCritical(ctx, "memcache.Set: %v", err)
-		return
-	}
-	fmt.Fprintf(w, "ok")
 }
 
 func benchmark(w http.ResponseWriter, r *http.Request) {
