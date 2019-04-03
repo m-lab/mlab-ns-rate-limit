@@ -225,7 +225,7 @@ func SetMulti(c context.Context, keys []*datastore.Key, endpoints []Stats) error
 			end = len(keys)
 		}
 
-		var items []*memcache.Item
+		items := make([]*memcache.Item, 0, 500)
 		for i := range keys[start:end] {
 			items = append(items, &memcache.Item{
 				Key:        keys[start+i].Name,
@@ -240,7 +240,7 @@ func SetMulti(c context.Context, keys []*datastore.Key, endpoints []Stats) error
 
 		// Guarantee that we stay under memcache "dedicated" SLO of 10k ops/sec/GB.
 		//   1_sec / (10000_ops / 500_ops/batch ) == 0.050_sec/batch.
-		time.Sleep(time.Millisecond * 50)
+		time.Sleep(50 * time.Millisecond)
 	}
 	return memcache.Set(ctx, &memcache.Item{Key: "sanity_check", Value: []byte("success"), Expiration: time.Hour})
 }
