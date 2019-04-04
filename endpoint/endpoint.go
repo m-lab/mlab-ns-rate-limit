@@ -25,6 +25,7 @@ import (
 const (
 	endpointKind      = "Requests"
 	endpointNamespace = "endpoint_stats"
+	batchSize         = 500
 )
 
 // Stats contains information about request rate for an endpoint, and probability
@@ -150,9 +151,9 @@ func DeleteAllKeys(ctx context.Context, client *datastore.Client, namespace stri
 
 	count := 0
 	errChan := make(chan error)
-	for start := 0; start < len(qkeys); start = start + 500 {
+	for start := 0; start < len(qkeys); start = start + batchSize {
 		count++
-		end := start + 500
+		end := start + batchSize
 		if end > len(qkeys) {
 			end = len(qkeys)
 		}
@@ -181,9 +182,9 @@ func DeleteAllKeys(ctx context.Context, client *datastore.Client, namespace stri
 func PutMulti(ctx context.Context, client *datastore.Client, keys []*datastore.Key, endpoints []Stats) error {
 	count := 0
 	errChan := make(chan error)
-	for start := 0; start < len(keys); start = start + 500 {
+	for start := 0; start < len(keys); start = start + batchSize {
 		count++
-		end := start + 500
+		end := start + batchSize
 		if end > len(keys) {
 			end = len(keys)
 		}
@@ -218,14 +219,16 @@ func SetMulti(c context.Context, keys []*datastore.Key, endpoints []Stats) error
 		return err
 	}
 	count := 0
-	for start := 0; start < len(keys); start = start + 500 {
+	// Since keys may contain 10's of thousands of record, process 'batchSize' keys
+	// at a time.
+	for start := 0; start < len(keys); start = start + batchSize {
 		count++
-		end := start + 500
+		end := start + batchSize
 		if end > len(keys) {
 			end = len(keys)
 		}
 
-		items := make([]*memcache.Item, 0, 500)
+		items := make([]*memcache.Item, 0, batchSize)
 		for i := range keys[start:end] {
 			items = append(items, &memcache.Item{
 				Key:        keys[start+i].Name,
