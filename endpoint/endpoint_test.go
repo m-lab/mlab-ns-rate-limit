@@ -15,6 +15,7 @@ import (
 	"cloud.google.com/go/datastore"
 	"github.com/m-lab/go/bqext"
 	"github.com/m-lab/mlab-ns-rate-limit/endpoint"
+	"google.golang.org/appengine/aetest"
 )
 
 func init() {
@@ -38,7 +39,7 @@ func TestDeleteAllKeys(t *testing.T) {
 
 	client, err := getClient()
 	if err != nil {
-		log.Fatal(err)
+		t.Fatal(err)
 	}
 
 	// Just verify that the call completes successfully.
@@ -83,7 +84,7 @@ func TestLiveBQQuery(t *testing.T) {
 
 	keys, _, err := endpoint.MakeKeysAndStats(rows)
 	if err != nil {
-		log.Fatalf("Failed: %v", err)
+		t.Fatalf("Failed: %v", err)
 	}
 	log.Println(len(keys), "rows over threshold")
 	// Test is meaningless if there are no interesting clients
@@ -103,7 +104,7 @@ func TestCreateTestEntries(t *testing.T) {
 
 	keys, endpoints, err := endpoint.MakeKeysAndStats(rows)
 	if err != nil {
-		log.Fatalf("Failed: %v", err)
+		t.Fatalf("Failed: %v", err)
 	}
 	log.Println(len(keys), "rows over threshold")
 	// Test is meaningless if there are no interesting clients
@@ -113,23 +114,34 @@ func TestCreateTestEntries(t *testing.T) {
 
 	client, err := getClient()
 	if err != nil {
-		log.Fatal(err)
+		t.Fatal(err)
 	}
 
-	ctx := context.Background()
+	ctx, done, err := aetest.NewContext()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer done()
+
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
 	// This is OK, because we are using client ProjectID mlab-testing.
 	_, err = endpoint.DeleteAllKeys(ctx, client, "endpoint_stats", "Requests")
 	if err != nil {
-		log.Fatal(len(keys), err)
+		t.Fatal(len(keys), err)
 	}
 
 	// Save all the keys
 	err = endpoint.PutMulti(ctx, client, keys, endpoints)
 	if err != nil {
-		log.Fatalf("Failed: %v", err)
+		t.Fatalf("Failed: %v", err)
+	}
+
+	// Save all the keys
+	err = endpoint.SetMulti(ctx, keys, endpoints)
+	if err != nil {
+		t.Fatalf("Failed: %v", err)
 	}
 
 	// Even the datastore emulator takes a little while to become consistent, so
@@ -139,7 +151,7 @@ func TestCreateTestEntries(t *testing.T) {
 		time.Sleep(delay)
 		found, err = endpoint.GetAllKeys(ctx, client, "endpoint_stats", "Requests")
 		if err != nil {
-			log.Fatal(err)
+			t.Fatal(err)
 		}
 		if len(found) == len(keys) {
 			return

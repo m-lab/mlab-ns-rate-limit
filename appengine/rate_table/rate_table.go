@@ -40,7 +40,7 @@ func init() {
 	http.HandleFunc("/", defaultHandler)
 	http.HandleFunc("/benchmark", benchmark)
 	http.HandleFunc("/status", Status)
-	http.HandleFunc("/update", Update)
+	http.HandleFunc("/update_request_signatures", Update)
 }
 
 // Status writes an instance summary into the response.
@@ -145,6 +145,18 @@ func Update(w http.ResponseWriter, r *http.Request) {
 		// metrics.WarningCount.WithLabelValues("no bad clients").Inc()
 	}
 
+	// Set all key names and endpoints in memcache.
+	err = endpoint.SetMulti(ctx, keys, endpoints)
+	if err != nil {
+		logWarning(ctx, "SetMulti: %v", err)
+		http.Error(w, `{"message": "SetMulti `+err.Error()+`"}`, http.StatusInternalServerError)
+		return
+	}
+	logDebug(ctx, "Set %d endpoint keys in memcache", len(keys))
+
+	// NB: We maintain the Datastore records as a convenient way for a human
+	// operator to list or find records that are also in memcache (which provides a
+	// lookup but not a list operation).
 	client, err := datastore.NewClient(ctx, projectID)
 	if err != nil {
 		logWarning(ctx, "datastore.NewClient: %v", err)
@@ -153,8 +165,16 @@ func Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// metrics.BadEndpointCount.Set(float64(len(keys)))
+	// Clear out current records to guarantee that records added are current.
+	n, err := endpoint.DeleteAllKeys(ctx, client, "endpoint_stats", "Requests")
+	if err != nil {
+		logWarning(ctx, "PutMulti: %v", err)
+		http.Error(w, `{"message": "`+err.Error()+`"}`, http.StatusInternalServerError)
+		return
+	}
+	logDebug(ctx, "Deleted %d Datastore records", n)
 
+	// Add current records.
 	err = endpoint.PutMulti(ctx, client, keys, endpoints)
 	if err != nil {
 		// metrics.FailCount.WithLabelValues("put-multi").Inc()
@@ -163,9 +183,7 @@ func Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO - clean up obsolete endpoints
 	// TODO - handle bloom filter
-	// TODO - update memcache
 	fmt.Fprintf(w, "ok")
 }
 
