@@ -88,7 +88,9 @@ func NewDataset(ctx context.Context, project, dataset string, clientOpts ...opti
 func Update(w http.ResponseWriter, r *http.Request) {
 	// TODO - load threshold from flags or env-vars (see Peter's code?)
 	// TODO - move env var loading to init() ?
-	threshold := 12                             // requests per day
+	// Start with a conservative threshold. Ideally, we want a lower limit for
+	// batch jobs than interactive users.
+	threshold := 20                             // requests per day
 	projectID, ok := os.LookupEnv("PROJECT_ID") // Datastore output project
 	if ok != true {
 		// metrics.FailCount.WithLabelValues("environ").Inc()
@@ -130,7 +132,7 @@ func Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	keys, endpoints, err := endpoint.MakeKeysAndStats(rows)
+	keys, endpoints, err := endpoint.MakeKeysAndStats(rows, threshold)
 	if err != nil {
 		logWarning(ctx, "MakeKeysAndStats: %v", err)
 		// metrics.FailCount.WithLabelValues("make").Inc()
