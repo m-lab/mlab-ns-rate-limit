@@ -82,7 +82,7 @@ func TestLiveBQQuery(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	keys, _, err := endpoint.MakeKeysAndStats(rows)
+	keys, _, err := endpoint.MakeKeysAndStats(rows, 20)
 	if err != nil {
 		t.Fatalf("Failed: %v", err)
 	}
@@ -102,7 +102,7 @@ func TestCreateTestEntries(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	keys, endpoints, err := endpoint.MakeKeysAndStats(rows)
+	keys, endpoints, err := endpoint.MakeKeysAndStats(rows, 20)
 	if err != nil {
 		t.Fatalf("Failed: %v", err)
 	}

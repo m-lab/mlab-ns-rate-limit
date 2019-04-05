@@ -36,17 +36,15 @@ type Stats struct {
 }
 
 // StatsFromMap creates a Key and Stats object from a bigquery result map.
-func StatsFromMap(row map[string]bigquery.Value) (string, Stats) {
+func StatsFromMap(row map[string]bigquery.Value, threshold int) (string, Stats) {
 	var stats Stats
 	rpd, ok := row["RequestsPerDay"]
 
 	if ok && rpd != nil {
 		stats.RequestsPerDay = rpd.(int64)
 		if stats.RequestsPerDay > 0 {
-			// TODO: make probability proportional to usage,
-			// e.g. 6.0 / float32(stats.RequestsPerDay)
-			// Probability of zero guarantees that all requests are offloaded or blocked.
-			stats.Probability = 0.0
+			// TODO: allow probability of zero to guarantee that all requests are blocked.
+			stats.Probability = float32(threshold) / float32(stats.RequestsPerDay)
 		}
 	}
 
@@ -90,12 +88,12 @@ func (ep *Stats) Save(ctx context.Context, client datastore.Client, key string) 
 }
 
 // MakeKeysAndStats converts slice of bigquery rows into DSKeys and Stats objects.
-func MakeKeysAndStats(rows []map[string]bigquery.Value) ([]*datastore.Key, []Stats, error) {
+func MakeKeysAndStats(rows []map[string]bigquery.Value, threshold int) ([]*datastore.Key, []Stats, error) {
 	// preallocate to match number of rows, to avoid reallocation.
 	keys := make([]*datastore.Key, 0, len(rows))
 	endpoints := make([]Stats, 0, len(rows))
 	for i := range rows {
-		key, ep := StatsFromMap(rows[i])
+		key, ep := StatsFromMap(rows[i], threshold)
 		endpoints = append(endpoints, ep)
 		keys = append(keys, DSKey(key))
 	}
@@ -107,7 +105,7 @@ func MakeKeysAndStats(rows []map[string]bigquery.Value) ([]*datastore.Key, []Sta
 // endpoint signatures and request counts.
 // TODO - move the body (excluding simpleQuery) into go/bqext
 func FetchEndpointStats(ctx context.Context, dsExt *bqext.Dataset, threshold int) ([]map[string]bigquery.Value, error) {
-	qString := strings.Replace(sixHourQuery, "${THRESHOLD}", fmt.Sprint(threshold), 1)
+	qString := strings.Replace(simpleQuery, "${THRESHOLD}", fmt.Sprint(threshold), 1)
 	qString = strings.Replace(qString, "${DATE}", fmt.Sprint(threshold), 1)
 
 	query := dsExt.ResultQuery(qString, false)
@@ -271,27 +269,3 @@ GROUP BY
 ORDER BY
   RequestsPerDay DESC
 LIMIT 20000`
-
-// sixHourQuery looks for clients that run every six hours and issue requests
-// to both /ndt and /neubot.
-var sixHourQuery = `
-SELECT
-    protoPayload.ip AS RequesterIP,
-    protoPayload.resource as resource,
-    protoPayload.userAgent as userAgent,
-    COUNT(*) as RequestsPerDay
-FROM
-  ` + "`mlab-ns.exports.appengine_googleapis_com_request_log_*`" + `
-WHERE
-     (_table_suffix = FORMAT_DATE("%Y%m%d", CURRENT_DATE())
-  OR  _table_suffix = FORMAT_DATE("%Y%m%d", DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY))
-  OR  _table_suffix = FORMAT_DATE("%Y%m%d", DATE_SUB(CURRENT_DATE(), INTERVAL 2 DAY))
-  AND protoPayload.starttime > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 2 DAY))
-  AND (protoPayload.resource = '/neubot' OR protoPayload.resource = '/ndt')
-  AND protoPayload.userAgent IS NULL
-  AND protoPayload.ip IN ( SELECT ip FROM ` + "`mlab-ns.library.unique_ips_in_six_hour_periods`" + ` )
-GROUP BY
-  RequesterIP, protoPayload.resource, protoPayload.userAgent
-ORDER BY
-  RequesterIP, RequestsPerDay DESC
-`
