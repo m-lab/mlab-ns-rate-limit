@@ -259,7 +259,8 @@ FROM (
   WHERE
     (_table_suffix = FORMAT_DATE("%Y%m%d", CURRENT_DATE())
     OR _table_suffix = FORMAT_DATE("%Y%m%d", DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)))
-    AND protoPayload.starttime > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 DAY)
+		AND protoPayload.starttime > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 DAY)
+		AND (REGEXP_CONTAINS(protoPayload.resource, '/neubot') OR REGEXP_CONTAINS(protoPayload.resource, '/ndt'))
   GROUP BY
     RequesterIP, userAgent, resource )
 WHERE
