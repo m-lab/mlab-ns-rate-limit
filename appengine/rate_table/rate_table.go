@@ -90,7 +90,7 @@ func Update(w http.ResponseWriter, r *http.Request) {
 	// TODO - move env var loading to init() ?
 	// Start with a conservative threshold. Ideally, we want a lower limit for
 	// batch jobs than interactive users.
-	threshold := 20                             // requests per day
+	threshold := 40                             // requests per day
 	projectID, ok := os.LookupEnv("PROJECT_ID") // Datastore output project
 	if ok != true {
 		// metrics.FailCount.WithLabelValues("environ").Inc()
