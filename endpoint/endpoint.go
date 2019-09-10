@@ -60,7 +60,13 @@ func StatsFromMap(row map[string]bigquery.Value, threshold int) (string, Stats) 
 	if ip == nil {
 		ip = ""
 	}
-	key := fmt.Sprintf("%s#%s#%s", userAgent, resource, ip)
+	key := fmt.Sprintf("%s#%s#%s", ip, userAgent, resource)
+
+	// Memcache keys cannot be longer than 250 bytes, but this string could be,
+	// so we truncate it after the first 250 bytes.
+	if len(key) > 250 {
+		key = key[:250]
+	}
 	return key, stats
 }
 
