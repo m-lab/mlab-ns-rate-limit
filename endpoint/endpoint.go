@@ -11,7 +11,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"math"
 	"strings"
 	"time"
 
@@ -27,6 +26,7 @@ const (
 	endpointKind      = "Requests"
 	endpointNamespace = "endpoint_stats"
 	batchSize         = 500
+	keyMaxLength      = 250
 )
 
 // Stats contains information about request rate for an endpoint, and probability
@@ -39,16 +39,19 @@ type Stats struct {
 // CalculateClientSignature generates a signature based on the client IP,
 // UserAgent and requested resource. The resulting signature must not be longer
 // than 250 bytes so it can be used as a memcache key (having MAX_LENGTH=250).
-func CalculateClientSignature(ip string, userAgent string,
-	resource string) string {
+func CalculateClientSignature(ip string, userAgent string, resource string) string {
 	// At least 40 characters are allocated to the resource part.
-	resMaxSize := int(math.Max(40, float64(248-len(ip)-len(userAgent))))
+	resMinSize := 40
+	resMaxSize := keyMaxLength - len(ip) - len(userAgent) - 2
+	if resMaxSize < resMinSize {
+		resMaxSize = resMinSize
+	}
 	if len(resource) > resMaxSize {
 		resource = resource[:resMaxSize]
 	}
 
 	// The remaining length is available for the User Agent part.
-	uaMaxSize := 248 - len(ip) - len(resource)
+	uaMaxSize := keyMaxLength - len(ip) - len(resource) - 2
 	if len(userAgent) > uaMaxSize {
 		userAgent = userAgent[:uaMaxSize]
 	}
