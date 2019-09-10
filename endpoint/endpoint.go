@@ -11,6 +11,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math"
 	"strings"
 	"time"
 
@@ -33,6 +34,26 @@ const (
 type Stats struct {
 	RequestsPerDay int64   `datastore:"requests_per_day"` // Number of requests made per day.
 	Probability    float32 `datastore:"probability"`      // Fraction of requests that should be sent to standard backend.
+}
+
+// CalculateClientSignature generates a signature based on the client IP,
+// UserAgent and requested resource. The resulting signature must not be longer
+// than 250 bytes so it can be used as a memcache key (having MAX_LENGTH=250).
+func CalculateClientSignature(ip string, userAgent string,
+	resource string) string {
+	// At least 40 characters are allocated to the resource part.
+	resMaxSize := int(math.Max(40, float64(248-len(ip)-len(userAgent))))
+	if len(resource) > resMaxSize {
+		resource = resource[:resMaxSize]
+	}
+
+	// The remaining length is available for the User Agent part.
+	uaMaxSize := 248 - len(ip) - len(resource)
+	if len(userAgent) > uaMaxSize {
+		userAgent = userAgent[:uaMaxSize]
+	}
+
+	return fmt.Sprintf("%s#%s#%s", ip, userAgent, resource)
 }
 
 // StatsFromMap creates a Key and Stats object from a bigquery result map.
@@ -60,13 +81,11 @@ func StatsFromMap(row map[string]bigquery.Value, threshold int) (string, Stats) 
 	if ip == nil {
 		ip = ""
 	}
-	key := fmt.Sprintf("%s#%s#%s", ip, userAgent, resource)
 
-	// Memcache keys cannot be longer than 250 bytes, but this string could be,
-	// so we truncate it after the first 250 bytes.
-	if len(key) > 250 {
-		key = key[:250]
-	}
+	key := CalculateClientSignature(fmt.Sprintf("%s", ip),
+		fmt.Sprintf("%s", userAgent),
+		fmt.Sprintf("%s", resource))
+
 	return key, stats
 }
 

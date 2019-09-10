@@ -199,3 +199,49 @@ func testRows() ([]map[string]bigquery.Value, error) {
 }
 
 var jsonTestRows = []byte(`[{"RequesterIP":"0.1.0.1","RequestsPerDay":4494,"resource":"/cron/check_status","userAgent":"AppEngine-Google; (+http://code.google.com/appengine)"},{"RequesterIP":"2601:406:302:6a50:b2fc:dff:fec8:eaad","RequestsPerDay":1883,"resource":"/ndt_ssl?policy=geo_options","userAgent":"Dalvik/2.1.0 (Linux; U; Android 5.1.1; AFTT Build/LVY48F)"},{"RequesterIP":"24.214.47.89","RequestsPerDay":1858,"resource":"/ndt?policy=geo_options","userAgent":"Dalvik/2.1.0 (Linux; U; Android 5.1.1; AFTT Build/LVY48F)"},{"RequesterIP":"2600:1700:4ef0:e10:b67c:9cff:fe54:4c08","RequestsPerDay":1834,"resource":"/ndt_ssl?policy=geo_options","userAgent":"Dalvik/2.1.0 (Linux; U; Android 5.1.1; AFTT Build/LVY48F)"},{"RequesterIP":"98.28.34.74","RequestsPerDay":1791,"resource":"/ndt?policy=geo_options","userAgent":"Dalvik/2.1.0 (Linux; U; Android 5.1.1; AFTT Build/LVY48F)"},{"RequesterIP":"24.165.204.134","RequestsPerDay":1531,"resource":"/ndt_ssl?policy=geo_options","userAgent":"Dalvik/2.1.0 (Linux; U; Android 5.1.1; AFTT Build/LVY48F)"},{"RequesterIP":"2600:8801:2d04:4e00:2fc:8bff:fe30:94dd","RequestsPerDay":1398,"resource":"/ndt_ssl?policy=geo_options","userAgent":"Dalvik/2.1.0 (Linux; U; Android 5.1.1; AFTT Build/LVY48F)"},{"RequesterIP":"209.107.214.55","RequestsPerDay":1371,"resource":"/ndt_ssl?policy=geo_options","userAgent":"Dalvik/2.1.0 (Linux; U; Android 5.1.1; AFTT Build/LVY48F)"},{"RequesterIP":"2604:2d80:840a:84b9:2fc:8bff:fe23:7760","RequestsPerDay":1345,"resource":"/ndt_ssl?policy=geo_options","userAgent":"Dalvik/2.1.0 (Linux; U; Android 5.1.1; AFTT Build/LVY48F)"},{"RequesterIP":"96.19.226.136","RequestsPerDay":1323,"resource":"/ndt?policy=geo_options","userAgent":"Dalvik/2.1.0 (Linux; U; Android 5.1.1; AFTT Build/LVY48F)"}]`)
+
+func TestCalculateClientSignature(t *testing.T) {
+	tests := []struct {
+		name      string
+		ip        string
+		userAgent string
+		resource  string
+		want      string
+	}{
+		{
+			ip:        "111.111.111.111",
+			userAgent: `fake user agent`,
+			resource:  "/ndt_ssl",
+			want:      "111.111.111.111#fake user agent#/ndt_ssl",
+		},
+		{
+			ip:        "111.111.111.111",
+			userAgent: "very long fake user agent very long fake user agent very long fake user agent very long fake user agent very long fake user agent very long fake user agent very long fake user agent very long fake user agent very long fake user agent very long fake user agent very long fake user agent very long fake user agent very long fake user agent",
+			resource:  "/ndt_ssl",
+			want:      "111.111.111.111#very long fake user agent very long fake user agent very long fake user agent very long fake user agent very long fake user agent very long fake user agent very long fake user agent very long fake user agent very long fake us#/ndt_ssl",
+		},
+		{
+			ip:        "111.111.111.111",
+			userAgent: "fake user agent",
+			resource:  "/verylongresourceverylongresourceverylongresource",
+			want:      "111.111.111.111#fake user agent#/verylongresourceverylongresourceverylongresource",
+		},
+		{
+			ip:        "111.111.111.111",
+			userAgent: "very long fake user agent very long fake user agent very long fake user agent very long fake user agent very long fake user agent very long fake user agent very long fake user agent very long fake user agent very long fake user agent very long fake user agent very long fake user agent very long fake user agent very long fake user agent",
+			resource:  "/verylongresourceverylongresourceverylongresource",
+			want:      "111.111.111.111#very long fake user agent very long fake user agent very long fake user agent very long fake user agent very long fake user agent very long fake user agent very long fake user agent very long f#/verylongresourceverylongresourceverylon",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := endpoint.CalculateClientSignature(tt.ip, tt.userAgent, tt.resource)
+			if got != tt.want {
+				t.Errorf("CalculateClientSignature() = %v, want %v", got, tt.want)
+			}
+			if len(got) > 250 {
+				t.Errorf("CalculateClientSignature() - len > 250 (%d)", len(got))
+			}
+		})
+	}
+}
