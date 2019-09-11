@@ -26,6 +26,7 @@ const (
 	endpointKind      = "Requests"
 	endpointNamespace = "endpoint_stats"
 	batchSize         = 500
+	keyMaxLength      = 250
 )
 
 // Stats contains information about request rate for an endpoint, and probability
@@ -33,6 +34,29 @@ const (
 type Stats struct {
 	RequestsPerDay int64   `datastore:"requests_per_day"` // Number of requests made per day.
 	Probability    float32 `datastore:"probability"`      // Fraction of requests that should be sent to standard backend.
+}
+
+// CalculateClientSignature generates a signature based on the client IP,
+// UserAgent and requested resource. The resulting signature must not be longer
+// than 250 bytes so it can be used as a memcache key (having MAX_LENGTH=250).
+func CalculateClientSignature(ip string, userAgent string, resource string) string {
+	// At least 40 characters are allocated to the resource part.
+	resMinSize := 40
+	resMaxSize := keyMaxLength - len(ip) - len(userAgent) - 2
+	if resMaxSize < resMinSize {
+		resMaxSize = resMinSize
+	}
+	if len(resource) > resMaxSize {
+		resource = resource[:resMaxSize]
+	}
+
+	// The remaining length is available for the User Agent part.
+	uaMaxSize := keyMaxLength - len(ip) - len(resource) - 2
+	if len(userAgent) > uaMaxSize {
+		userAgent = userAgent[:uaMaxSize]
+	}
+
+	return fmt.Sprintf("%s#%s#%s", ip, userAgent, resource)
 }
 
 // StatsFromMap creates a Key and Stats object from a bigquery result map.
@@ -60,7 +84,11 @@ func StatsFromMap(row map[string]bigquery.Value, threshold int) (string, Stats) 
 	if ip == nil {
 		ip = ""
 	}
-	key := fmt.Sprintf("%s#%s#%s", userAgent, resource, ip)
+
+	key := CalculateClientSignature(fmt.Sprintf("%s", ip),
+		fmt.Sprintf("%s", userAgent),
+		fmt.Sprintf("%s", resource))
+
 	return key, stats
 }
 
