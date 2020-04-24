@@ -16,7 +16,7 @@ import (
 
 	"cloud.google.com/go/bigquery"
 	"cloud.google.com/go/datastore"
-	"github.com/m-lab/go/bqext"
+	"github.com/m-lab/go/cloud/bqx"
 	"google.golang.org/api/iterator"
 	"google.golang.org/appengine"
 	"google.golang.org/appengine/memcache"
@@ -132,7 +132,7 @@ func MakeKeysAndStats(rows []map[string]bigquery.Value, threshold int) ([]*datas
 // FetchEndpointStats executes simpleQuery, and returns a slice of rows containing
 // endpoint signatures and request counts.
 // TODO - move the body (excluding simpleQuery) into go/bqext
-func FetchEndpointStats(ctx context.Context, dsExt *bqext.Dataset, threshold int) ([]map[string]bigquery.Value, error) {
+func FetchEndpointStats(ctx context.Context, dsExt *bqx.Dataset, threshold int) ([]map[string]bigquery.Value, error) {
 	qString := strings.Replace(simpleQuery, "${THRESHOLD}", fmt.Sprint(threshold), 1)
 	qString = strings.Replace(qString, "${DATE}", fmt.Sprint(threshold), 1)
 

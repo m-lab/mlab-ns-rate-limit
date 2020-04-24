@@ -13,7 +13,7 @@ import (
 
 	"cloud.google.com/go/bigquery"
 	"cloud.google.com/go/datastore"
-	"github.com/m-lab/go/bqext"
+	"github.com/m-lab/go/cloud/bqx"
 	"github.com/m-lab/mlab-ns-rate-limit/endpoint"
 	"google.golang.org/appengine/aetest"
 )
@@ -69,7 +69,7 @@ func TestLiveBQQuery(t *testing.T) {
 	}
 
 	// Using the real mlab-ns table!
-	dsExt, err := bqext.NewDataset("mlab-ns", "exports")
+	dsExt, err := bqx.NewDataset("mlab-ns", "exports")
 	if err != nil {
 		t.Fatal(err)
 	}

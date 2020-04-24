@@ -16,7 +16,7 @@ import (
 
 	"cloud.google.com/go/bigquery"
 	"cloud.google.com/go/datastore"
-	"github.com/m-lab/go/bqext"
+	"github.com/m-lab/go/cloud/bqx"
 	"github.com/m-lab/mlab-ns-rate-limit/endpoint"
 	"google.golang.org/api/option"
 	"google.golang.org/appengine"
@@ -75,16 +75,16 @@ func Status(w http.ResponseWriter, r *http.Request) {
 // Additional bigquery ClientOptions may be optionally passed as final
 // clientOpts argument.  This is useful for testing credentials.
 // TODO - update go/bqext version to accept a context.
-func NewDataset(ctx context.Context, project, dataset string, clientOpts ...option.ClientOption) (bqext.Dataset, error) {
+func NewDataset(ctx context.Context, project, dataset string, clientOpts ...option.ClientOption) (bqx.Dataset, error) {
 	var bqClient *bigquery.Client
 	var err error
 	bqClient, err = bigquery.NewClient(ctx, project, clientOpts...)
 
 	if err != nil {
-		return bqext.Dataset{}, err
+		return bqx.Dataset{}, err
 	}
 
-	return bqext.Dataset{bqClient.Dataset(dataset), bqClient}, nil
+	return bqx.Dataset{bqClient.Dataset(dataset), bqClient}, nil
 }
 
 // Update pulls new data from BigQuery, and pushes updated key/value pairs
