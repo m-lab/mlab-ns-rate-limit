@@ -2,7 +2,7 @@
 // entries to control mlab-ns rate limiting.
 // TODO - add more metrics?
 // TODO - update travis submodule after deploy_app changes are committed.
-package rate_table
+package main
 
 import (
 	"context"
@@ -40,12 +40,13 @@ const threshold = 40
 //  c. Will create a bloom filter and also store it in datastore.
 //  d. Will not handle memcache entries, as python uses pickling, and go uses binary, json or gob.
 
-func init() {
+func main() {
 	// Always prepend the filename and line number.
 	http.HandleFunc("/", defaultHandler)
 	http.HandleFunc("/benchmark", benchmark)
 	http.HandleFunc("/status", Status)
 	http.HandleFunc("/update_request_signatures", Update)
+	appengine.Main()
 }
 
 // Status writes an instance summary into the response.
