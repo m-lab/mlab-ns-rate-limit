@@ -289,6 +289,11 @@ FROM (
     OR _table_suffix = FORMAT_DATE("%Y%m%d", DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)))
 		AND protoPayload.starttime > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 DAY)
 		AND (REGEXP_CONTAINS(protoPayload.resource, '/neubot') OR REGEXP_CONTAINS(protoPayload.resource, '/ndt'))
+    AND NOT (
+        // NOTE: temporarily exclude proxy requests from the locate/v2 service.
+        // TODO: include locate/v2 requests.
+        REGEXP_CONTAINS(protoPayload.resource, '/ndt.*lat=.*lon=.*policy=geo_options')
+    )
   GROUP BY
     RequesterIP, userAgent, resource )
 WHERE
@@ -297,4 +302,5 @@ GROUP BY
   RequesterIP, userAgent, resource, RequestsPerDay
 ORDER BY
   RequestsPerDay DESC
-LIMIT 20000`
+LIMIT 20000
+`
